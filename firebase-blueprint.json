@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "Registered bot user",
+      "type": "object",
+      "properties": {
+        "telegram_id": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "city": { "type": "string" },
+        "bio": { "type": "string" },
+        "photo_url": { "type": "string" },
+        "interests": { "type": "array" }
+      },
+      "required": ["telegram_id", "name"]
+    },
+    "like": {
+      "title": "Like",
+      "description": "A like action between users",
+      "type": "object",
+      "properties": {
+        "from_user_id": { "type": "string" },
+        "to_user_id": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["from_user_id", "to_user_id"]
+    },
+    "match": {
+      "title": "Match",
+      "description": "A match between two users",
+      "type": "object",
+      "properties": {
+        "user1_id": { "type": "string" },
+        "user2_id": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["user1_id", "user2_id"]
+    }
+  },
+  "firestore": {
+    "users/{telegramId}": {
+      "schema": "user",
+      "description": "Collection of user profiles"
+    },
+    "likes": {
+      "schema": "like",
+      "description": "Collection of likes"
+    },
+    "matches": {
+      "schema": "match",
+      "description": "Collection of matches"
+    }
+  }
+}

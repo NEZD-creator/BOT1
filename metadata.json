@@ -1,0 +1,6 @@
+{
+  "name": "Dating Telegram Bot",
+  "description": "A Telegram-based dating bot for finding and matching users by interests, location, and photos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
