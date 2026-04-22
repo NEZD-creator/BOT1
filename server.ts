@@ -1,6 +1,6 @@
 import { Telegraf, session, Scenes, Markup } from 'telegraf';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, where, limit, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, where, limit, serverTimestamp, getCountFromServer } from 'firebase/firestore';
 import express from 'express';
 import * as fs from 'fs';
 import 'dotenv/config';
@@ -18,8 +18,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 const expressApp = express();
-expressApp.get('/', (req, res) => res.send(`Bot is Active`));
-expressApp.listen(3000, '0.0.0.0', () => console.log('HTTP Server running.'));
+expressApp.get('/', (req, res) => res.send(`Bot is Active and Ready`));
 
 const bot = token ? new Telegraf(token) : null;
 
@@ -48,7 +47,7 @@ if (bot) {
 
     const mainMenu = Markup.keyboard([
         ['🔥 Лента', '🔍 Умный поиск'],
-        ['⚙️ Общее Меню']
+        ['🎁 Привести друга (VIP)', '⚙️ Общее Меню']
     ]).resize();
 
     // ----------------------------------------
@@ -251,16 +250,64 @@ if (bot) {
     );
 
     const stage = new Stage([profileWizard, interestWizard]);
-    bot.catch((err) => console.error("Bot Error", err));
+    
+    bot.catch(async (err: any, ctx: any) => {
+        console.error("Bot Global Error:", err);
+        try {
+            if (ctx.callbackQuery) {
+                await ctx.answerCbQuery('🔄 Идет обновление бота...', { show_alert: false }).catch(()=>{});
+            }
+            if (ctx.scene) await ctx.scene.leave().catch(()=>{});
+            await ctx.reply('🔄 <b>Бот был обновлен.</b>\nСессия восстановлена, продолжаем работу! 👇', { parse_mode: 'HTML', ...mainMenu }).catch(()=>{});
+        } catch(e) {
+            console.error("Recovery failed", e);
+        }
+    });
+
     bot.use(session());
     bot.use(stage.middleware() as any);
 
     bot.start(async (ctx: any) => {
         const uid = String(ctx.from?.id);
-        const userDoc = await getDoc(doc(db, 'users', uid));
+        const refDoc = doc(db, 'users', uid);
+        const userDoc = await getDoc(refDoc);
+        
+        // В Telegraf payload стартовой команды можно получить через ctx.payload или распарсив команду:
+        const payload = ctx.payload || (ctx.message?.text?.split(' ')[1]);
+
         if (userDoc.exists()) {
+            if (userDoc.data().banned) return ctx.reply('⛔ <b>Ваш аккаунт заблокирован.</b>', { parse_mode: 'HTML' });
             await ctx.reply('<b>С возвращением!</b> Нажимай «🔥 Лента», чтобы продолжить поиск! 💘', { parse_mode: 'HTML', ...mainMenu });
         } else {
+            let premiumUntil = 0;
+            if (payload && payload !== uid) {
+                const inviterDocRef = doc(db, 'users', payload);
+                const inviterDoc = await getDoc(inviterDocRef);
+                
+                if (inviterDoc.exists() && !inviterDoc.data().banned) {
+                    const oldInviterPremium = inviterDoc.data().premium_until || Date.now();
+                    const newInviterPremium = Math.max(oldInviterPremium, Date.now()) + (3 * 24 * 60 * 60 * 1000);
+                    await setDoc(inviterDocRef, { is_premium: true, premium_until: newInviterPremium }, { merge: true });
+                    
+                    try {
+                        await bot.telegram.sendMessage(payload, '🎁 <b>По твоей ссылке зарегистрировался новый друг!</b>\n Тебе начислено +3 дня VIP статуса! 💎', { parse_mode: 'HTML' });
+                    } catch(e) {}
+                    
+                    premiumUntil = Date.now() + (3 * 24 * 60 * 60 * 1000);
+                    await ctx.reply('🎁 <b>Поздравляем!</b> Ты перешел по приглашению и сразу получаешь <b>3 дня VIP-статуса</b>! 💎', { parse_mode: 'HTML' });
+                }
+            }
+
+            // Создаем болванку для пользователя, чтобы закрепить за ним VIP (если есть).
+            await setDoc(refDoc, {
+                telegram_id: uid,
+                username: ctx.from?.username || '',
+                active: false,
+                created_at: serverTimestamp(),
+                is_premium: premiumUntil > 0,
+                premium_until: premiumUntil
+            });
+
             await ctx.reply('<b>Привет! Бот-Дейтинг на связи.</b> 💘\nТут можно найти классную компанию, вторую половину или новых друзей.\n\nЖми кнопку ниже, чтобы заполнить анкету!', 
                 { parse_mode: 'HTML', ...Markup.inlineKeyboard([[{ text: '📝 Создать профиль', callback_data: 'edit_profile' }]]) }
             );
@@ -457,6 +504,19 @@ if (bot) {
     bot.hears('🔍 Умный поиск', async (ctx: any) => {
         ctx.scene.enter('interest-wizard');
     });
+    bot.hears('🎁 Привести друга (VIP)', async (ctx: any) => {
+        const myId = ctx.from.id;
+        const botInfo = await bot.telegram.getMe();
+        const botUsername = '@' + botInfo.username;
+        const refLink = `https://t.me/${botInfo.username}?start=${myId}`;
+        
+        const header = `🎁 <b>Бесплатный VIP за друзей!</b>\n\nСкопируй или перешли (Forward) сообщение ниже своим друзьям.\n\nКак только друг запустит бота по твоей ссылке, <b>вы ОБА получите по 3 дня VIP-статуса</b> 💎!`;
+        await ctx.reply(header, { parse_mode: 'HTML', ...mainMenu });
+
+        const copyText = `Привет! Нашел крутого бота для знакомств ${botUsername} 🔥\n\nТут можно смотреть видеовизитки и искать людей из нашего города без фейков и подписок.\n\nЗаходи по моей пригласительной ссылке ниже, чтобы нам с тобой сразу дали бесплатный VIP-статус: 👇\n\n${refLink}`;
+        
+        await ctx.reply(copyText);
+    });
     bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
 
     const isSuperAdmin = (ctx: any) => ctx.from?.username?.toLowerCase() === 'vnezdv';
@@ -508,6 +568,34 @@ if (bot) {
             await ctx.reply(`❌ ID ${remAdminId} удален из модераторов.`);
         } else {
             await ctx.reply('Этот пользователь не был модератором.');
+        }
+    });
+
+    bot.command('stats', async (ctx: any) => {
+        const uid = String(ctx.from.id);
+        const confDoc = await getDoc(doc(db, 'config', 'system'));
+        const admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+
+        if (!isSuperAdmin(ctx) && !admins.includes(uid)) {
+            return ctx.reply('⛔ Отказано в доступе. Команда только для администрации.');
+        }
+
+        const waitMsg = await ctx.reply('⏳ Собираю статистику баз данных...');
+        
+        try {
+            const totalUsersSnap = await getCountFromServer(collection(db, 'users'));
+            const activeUsersSnap = await getCountFromServer(query(collection(db, 'users'), where('active', '==', true)));
+            const premiumUsersSnap = await getCountFromServer(query(collection(db, 'users'), where('is_premium', '==', true)));
+
+            const text = `📊 <b>Статистика бота</b>\n\n` +
+                         `👥 <b>Всего зарегистрировано:</b> ${totalUsersSnap.data().count}\n` +
+                         `🔥 <b>Активных анкет (онлайн-база):</b> ${activeUsersSnap.data().count}\n` +
+                         `💎 <b>VIP статусов:</b> ${premiumUsersSnap.data().count}`;
+
+            await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, text, { parse_mode: 'HTML' });
+        } catch (e) {
+            console.error(e);
+            await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, '❌ Ошибка при получении статистики.');
         }
     });
 
@@ -761,8 +849,41 @@ if (bot) {
         await ctx.editMessageText('✅ Модерация:\nЖАЛОБА ОТКЛОНЕНА').catch(()=>{});
     });
 
-    bot.launch();
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
-    console.log('Bot is running heavily optimized with Premium Subscriptions and Admin Reporting...');
+    // ----------------------------------------
+    // AUTO-RECOVERY (FALLBACK HANDLERS)
+    // ----------------------------------------
+    // Если пользователь нажал на старую кнопку, которая уже не обрабатывается ни одним bot.action
+    bot.on('callback_query', async (ctx: any) => {
+        await ctx.answerCbQuery('🔄 Меню обновлено!', { show_alert: false }).catch(()=>{});
+        if (ctx.scene) await ctx.scene.leave().catch(()=>{});
+        await ctx.reply('🔄 <b>Бот был переведен на новую версию.</b>\nСвязь восстановлена, выберите действие в меню 👇', { parse_mode: 'HTML', ...mainMenu }).catch(()=>{});
+    });
+
+    // Если пользователь отправил текст/медиа вне сцены и не попал ни в одну кнопку (бот перезагрузился и т.д.)
+    bot.on('message', async (ctx: any) => {
+        if (ctx.scene) await ctx.scene.leave().catch(()=>{});
+        await ctx.reply('🔄 <b>Я всегда на связи!</b>\nЕсли что-то зависло, я автоматически обновил сессию.\n\nЖми пункт меню ниже 👇', { parse_mode: 'HTML', ...mainMenu }).catch(()=>{});
+    });
+
+    // Инициализация Webhooks или Long Polling
+    const webhookDomain = process.env.WEBHOOK_DOMAIN;
+    
+    if (webhookDomain) {
+        // Запуск через Webhook (Рекомендуется для Cloud Run / 24/7 VPS)
+        expressApp.use(bot.webhookCallback('/telegraf'));
+        bot.telegram.setWebhook(`${webhookDomain}/telegraf`)
+            .then(() => console.log(`🚀 Bot is running in Webhook mode: ${webhookDomain}/telegraf`));
+    } else {
+        // Запуск через Long Polling (Для среды разработки AI Studio)
+        bot.launch();
+        console.log('🚀 Bot is running in Long Polling mode (Development)...');
+    }
+
+    expressApp.listen(3000, '0.0.0.0', () => {
+        console.log('🌐 HTTP Server listening on port 3000');
+    });
+
+    process.once('SIGINT', () => { bot.stop('SIGINT') });
+    process.once('SIGTERM', () => { bot.stop('SIGTERM') });
+    console.log('Bot is heavily optimized with Premium Subscriptions and Admin Reporting...');
 }

@@ -1,0 +1,10 @@
+meta:
+  environment: nodejs
+  toolchain:
+    name: npm
+    version: 22
+build:
+  steps:
+    - npm install
+run:
+  scriptName: start
