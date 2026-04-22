@@ -868,6 +868,9 @@ if (bot) {
     // Инициализация Webhooks или Long Polling
     const webhookDomain = process.env.WEBHOOK_DOMAIN;
     
+    // ВРЕМЕННО ОТКЛЮЧАЕМ РЕЖИМ ЛОКАЛЬНОГО ОПРОСА В AI STUDIO (УСТРАНЕНИЕ ОШИБКИ 409 НА AMVERA)
+    const disableLocalPolling = true; // Измените на false, если захотите вернуть работу бота в AI Studio
+
     if (webhookDomain) {
         try {
             console.log(`Configuring Webhook for: ${webhookDomain}/telegraf`);
@@ -878,7 +881,7 @@ if (bot) {
         } catch (e) {
             console.error("Webhook Setup Error:", e);
         }
-    } else {
+    } else if (!disableLocalPolling) {
         // Запуск через Long Polling (Для среды разработки AI Studio)
         try {
             await bot.telegram.deleteWebhook({ drop_pending_updates: true });
@@ -891,6 +894,8 @@ if (bot) {
                 console.error("Long Polling Error:", e);
             }
         }
+    } else {
+        console.log('⛔ Local Polling is deliberately DISABLED in AI Studio to allow the bot to run correctly on Amvera without 409 conflicts.');
     }
 
     expressApp.listen(3000, '0.0.0.0', () => {
