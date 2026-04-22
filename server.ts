@@ -448,6 +448,7 @@ if (bot) {
         
         const kbd = Markup.inlineKeyboard([
             [{ text: 'Изменить профиль', callback_data: 'edit_profile' }],
+            [{ text: '📊 Статистика анкеты', callback_data: 'my_stats' }],
             [{ text: d.active ? 'Скрыть анкету (Пауза)' : 'Включить поиск', callback_data: 'toggle_active' }]
         ]);
         
@@ -457,6 +458,31 @@ if (bot) {
             ctx.session.myProfileMsgId = sentMsg.message_id;
         }
     }
+
+    bot.action('my_stats', async (ctx: any) => {
+        const uid = String(ctx.from.id);
+        try {
+            const snap = await getDocs(query(collection(db, 'interactions'), where('to_user_id', '==', uid)));
+            let views = 0;
+            let likes = 0;
+            let superlikes = 0;
+            
+            snap.forEach(d => {
+                views++;
+                const data = d.data();
+                if (data.type === 'like') {
+                    likes++;
+                    if (data.is_superlike) superlikes++;
+                }
+            });
+
+            const text = `📊 Ваша популярность\n\n👁 Показов анкеты: ${views}\n❤️ Получено лайков: ${likes}\n⭐ Из них суперлайков: ${superlikes}`;
+            await ctx.answerCbQuery(text, { showAlert: true });
+        } catch (e) {
+            console.error(e);
+            await ctx.answerCbQuery('Не удалось загрузить данные', { showAlert: true });
+        }
+    });
 
     bot.action('edit_profile', async (ctx: any) => { 
         await ctx.answerCbQuery();
