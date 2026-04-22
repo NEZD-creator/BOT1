@@ -249,7 +249,57 @@ if (bot) {
         }
     );
 
-    const stage = new Stage([profileWizard, interestWizard]);
+    // Быстрое редактирование
+    const quickPhotoWizard = new WizardScene(
+        'quick-photo',
+        async (ctx: any) => {
+            const msg = await ctx.reply('📸 <b>Смена фото</b>\nПришлите новое фото или видео-кружок (до 15 сек):', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+            ctx.wizard.state.l = msg.message_id; return ctx.wizard.next();
+        },
+        async (ctx: any) => {
+            let mid, mtype;
+            if (ctx.message?.photo) { mid = ctx.message.photo[ctx.message.photo.length - 1].file_id; mtype = 'photo'; }
+            else if (ctx.message?.video && ctx.message.video.duration <= 15) { mid = ctx.message.video.file_id; mtype = 'video'; }
+            else if (ctx.message?.video_note) { mid = ctx.message.video_note.file_id; mtype = 'video'; }
+            else if (ctx.message?.animation) { mid = ctx.message.animation.file_id; mtype = 'animation'; }
+            else return;
+            await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
+            await setDoc(doc(db, 'users', String(ctx.from.id)), { media_id: mid, media_type: mtype, updated_at: serverTimestamp() }, { merge: true });
+            await ctx.reply('✅ Фото обновлено!', mainMenu); await showMyProfile(ctx, String(ctx.from.id)); return ctx.scene.leave();
+        }
+    );
+    const quickBioWizard = new WizardScene(
+        'quick-bio',
+        async (ctx: any) => {
+            const msg = await ctx.reply('📝 <b>Смена текста</b>\nНапиши новое описание о себе:', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+            ctx.wizard.state.l = msg.message_id; return ctx.wizard.next();
+        },
+        async (ctx: any) => {
+            if (ctx.message?.text) {
+                await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
+                await setDoc(doc(db, 'users', String(ctx.from.id)), { bio: ctx.message.text.substring(0, 300), updated_at: serverTimestamp() }, { merge: true });
+                await ctx.reply('✅ Описание обновлено!', mainMenu); await showMyProfile(ctx, String(ctx.from.id));
+            }
+            return ctx.scene.leave();
+        }
+    );
+    const quickCityWizard = new WizardScene(
+        'quick-city',
+        async (ctx: any) => {
+            const msg = await ctx.reply('🌆 <b>Смена города</b>\nВведи свой новый город:', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+            ctx.wizard.state.l = msg.message_id; return ctx.wizard.next();
+        },
+        async (ctx: any) => {
+            if (ctx.message?.text) {
+                await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
+                await setDoc(doc(db, 'users', String(ctx.from.id)), { city: ctx.message.text.substring(0, 50), updated_at: serverTimestamp() }, { merge: true });
+                await ctx.reply('✅ Город обновлен!', mainMenu); await showMyProfile(ctx, String(ctx.from.id));
+            }
+            return ctx.scene.leave();
+        }
+    );
+
+    const stage = new Stage([profileWizard, interestWizard, quickPhotoWizard, quickBioWizard, quickCityWizard]);
     
     bot.catch(async (err: any, ctx: any) => {
         console.error("Bot Global Error:", err);
@@ -371,8 +421,38 @@ if (bot) {
 
     bot.action('edit_profile', async (ctx: any) => { 
         await ctx.answerCbQuery();
-        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id); 
-        ctx.scene.enter('profile-wizard'); 
+        await ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+                [{ text: '📸 Изменить фото', callback_data: 'quick_photo' }],
+                [{ text: '📝 Изменить о себе', callback_data: 'quick_bio' }],
+                [{ text: '🌆 Изменить город', callback_data: 'quick_city' }],
+                [{ text: '🔄 Заполнить заново (Всё)', callback_data: 'full_edit' }],
+                [{ text: '🔙 Назад', callback_data: 'my_profile' }]
+            ]
+        }).catch(()=>{});
+    });
+    
+    bot.action('full_edit', async (ctx: any) => { 
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        ctx.scene.enter('profile-wizard');
+    });
+    bot.action('quick_photo', async (ctx: any) => { 
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        ctx.scene.enter('quick-photo');
+    });
+    bot.action('quick_bio', async (ctx: any) => { 
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        ctx.scene.enter('quick-bio');
+    });
+    bot.action('quick_city', async (ctx: any) => { 
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        ctx.scene.enter('quick-city');
+    });
+    bot.action('view_likes', async (ctx: any) => {
+        await ctx.answerCbQuery();
+        if (!ctx.session) ctx.session = {};
+        ctx.session.view_likes_mode = true;
+        await showNextProfile(ctx, String(ctx.from.id));
     });
     bot.action('toggle_active', async (ctx: any) => {
         const uid = String(ctx.from.id);
@@ -417,6 +497,11 @@ if (bot) {
             const candidates = await getDocs(usersQuery);
             let unseen: any[] = [];
             let seen: { profile: any, lastInteraction: number }[] = [];
+            let unseenLikers: any[] = [];
+
+            const incomingDocs = await getDocs(query(collection(db, 'interactions'), where('to_user_id', '==', telegramId)));
+            const likers = new Set();
+            incomingDocs.forEach(d => { if (d.data().type === 'like' && !interactedMap.has(d.data().from_user_id)) likers.add(d.data().from_user_id); });
 
             const searchQuery = ctx.session?.currentSearchQuery ? ctx.session.currentSearchQuery.toLowerCase() : null;
 
@@ -424,6 +509,10 @@ if (bot) {
                 const b = cDoc.data();
                 if (b.telegram_id === telegramId || b.banned) continue;
                 
+                // СТРОГИЙ ФИЛЬТР ПО ВОЗРАСТУ ±2 ГОДА (отменяем для тех, кто нас уже лайкнул)
+                const isLiker = likers.has(b.telegram_id);
+                if (!isLiker && Math.abs(myProfile.age - b.age) > 2) continue;
+
                 // Gender match filter
                 if (b.target_gender !== 'target_any') {
                     const theirSearchGender = b.target_gender === 'target_m' ? 'gender_m' : 'gender_f';
@@ -435,7 +524,8 @@ if (bot) {
                 if (interactedMap.has(b.telegram_id)) {
                     seen.push({ profile: b, lastInteraction: interactedMap.get(b.telegram_id) });
                 } else {
-                    unseen.push(b);
+                    if (likers.has(b.telegram_id)) unseenLikers.push(b);
+                    else unseen.push(b);
                 }
             }
             
@@ -465,12 +555,25 @@ if (bot) {
             };
 
             let candidateToShow = null;
-            if (unseen.length > 0) {
-                unseen.sort((a, b) => calculateMatchScore(myProfile, b) - calculateMatchScore(myProfile, a));
-                candidateToShow = unseen[0];
-            } else if (seen.length > 0) {
-                seen.sort((a, b) => a.lastInteraction - b.lastInteraction);
-                candidateToShow = seen[0].profile;
+            if (ctx.session?.view_likes_mode) {
+                if (unseenLikers.length > 0) {
+                    candidateToShow = unseenLikers[0];
+                } else {
+                    ctx.session.view_likes_mode = false;
+                    await ctx.reply('💌 <b>Текущие симпатии закончились!</b>\nВозвращаю вас в общую ленту...', { parse_mode: 'HTML' });
+                    if (unseen.length > 0) {
+                        unseen.sort((a, b) => calculateMatchScore(myProfile, b) - calculateMatchScore(myProfile, a));
+                        candidateToShow = unseen[0];
+                    }
+                }
+            } else {
+                if (unseen.length > 0) {
+                    unseen.sort((a, b) => calculateMatchScore(myProfile, b) - calculateMatchScore(myProfile, a));
+                    candidateToShow = unseen[0];
+                } else if (seen.length > 0) {
+                    seen.sort((a, b) => a.lastInteraction - b.lastInteraction);
+                    candidateToShow = seen[0].profile;
+                }
             }
             
             if (!candidateToShow) {
@@ -649,6 +752,40 @@ if (bot) {
     // ----------------------------------------
     // INTERACTIONS (LIKE / DISLIKE / SUPERLIKE )
     // ----------------------------------------
+    async function notifyIncomingLike(toUserId: string) {
+        try {
+            const incoming = await getDocs(query(collection(db, 'interactions'), where('to_user_id', '==', toUserId)));
+            const outgoing = await getDocs(query(collection(db, 'interactions'), where('from_user_id', '==', toUserId)));
+            
+            const outSet = new Set();
+            outgoing.forEach(d => outSet.add(d.data().to_user_id));
+            
+            let pending = 0;
+            incoming.forEach(d => {
+                if (d.data().type === 'like' && !outSet.has(d.data().from_user_id)) {
+                    pending++;
+                }
+            });
+
+            const uDoc = await getDoc(doc(db, 'users', toUserId));
+            if (!uDoc.exists()) return;
+            const uData = uDoc.data();
+
+            if (pending > 0) {
+                const text = `💌 <b>У вас ${pending} ${pending === 1 ? 'новая симпатия' : 'скрытых симпатий'}!</b>\nХотите посмотреть, кому вы понравились?`;
+                const kbd = Markup.inlineKeyboard([[{ text: '👀 Посмотреть', callback_data: 'view_likes' }]]);
+                
+                // delete old notification
+                if (uData.likes_msg_id) {
+                    try { await bot!.telegram.deleteMessage(toUserId, uData.likes_msg_id); } catch(e){}
+                }
+                
+                const sent = await bot!.telegram.sendMessage(toUserId, text, { parse_mode: 'HTML', ...kbd });
+                await setDoc(doc(db, 'users', toUserId), { likes_msg_id: sent.message_id }, { merge: true });
+            }
+        } catch(e) { console.error('notify err', e); }
+    }
+
     bot.action(/^like_(.+)$/, async (ctx: any) => {
         const toUserId = ctx.match[1];
         const fromUserId = String(ctx.from?.id);
@@ -675,6 +812,7 @@ if (bot) {
                 await sendMethod(toUserId, mediaId, { caption: `🎉 <b>Взаимная симпатия!</b> 🎉\n\nТы понравился(ась) <b>${myD.name}</b>.\nСкорее пиши первым(ой)! 🔥`, reply_markup: matchKbdThem.reply_markup as any, parse_mode: 'HTML' }).catch(()=>{});
             } else {
                 ctx.answerCbQuery('Лайк отправлен 💖');
+                await notifyIncomingLike(toUserId);
             }
             await showNextProfile(ctx, fromUserId);
         } catch (err) { ctx.answerCbQuery('Ошибка'); }
