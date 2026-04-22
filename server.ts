@@ -42,13 +42,16 @@ if (bot) {
 
     const formatCard = (d: any) => {
         const premiumBadge = d.is_premium ? ' VIP' : '';
-        return `<b>${d.name}, ${d.age}</b>${premiumBadge}\n<i>${d.city}</i>\n\n${d.bio}`;
+        return `<b>${d.name}, ${d.age}, ${d.city}</b>${premiumBadge} – ${d.bio}`;
     };
 
-    const mainMenu = Markup.keyboard([
-        ['Лента', 'Настройки'],
-        ['VIP / Профиль']
-    ]).resize();
+    bot.telegram.setMyCommands([
+        { command: 'search', description: '🚀 Смотреть анкеты' },
+        { command: 'myprofile', description: '👤 Моя анкета' },
+        { command: 'premium', description: '⭐ Premium' },
+        { command: 'complaint', description: '🚫 Пожаловаться' },
+        { command: 'stats', description: '📊 Статистика (Админы)' }
+    ]).catch(()=>{});
 
     // ----------------------------------------
     // WIZARD: PROFILE CREATION
@@ -217,7 +220,7 @@ if (bot) {
         
         try {
             await setDoc(doc(db, 'users', telegramId), profileData, { merge: true });
-            await ctx.reply('<b>Анкета сохранена!</b>', { parse_mode: 'HTML', ...mainMenu });
+            await ctx.reply('<b>Анкета сохранена!</b>', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
             await showMyProfile(ctx, telegramId);
         } catch (err: any) { await ctx.reply(`Ошибка БД: ${err.message}`); }
         return ctx.scene.leave();
@@ -242,7 +245,7 @@ if (bot) {
                 if (!ctx.session) ctx.session = {};
                 ctx.session.currentSearchQuery = querytext;
                 
-                await ctx.reply(`🎯 Ищем анкеты со словом: <b>${querytext}</b>...\n<i>(Для сброса фильтра нажми "🔥 Лента" в меню)</i>`, { parse_mode: 'HTML', ...mainMenu });
+                await ctx.reply(`🎯 Ищем анкеты со словом: <b>${querytext}</b>...\n<i>(Для сброса фильтра нажми /search)</i>`, { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
                 await showNextProfile(ctx, String(ctx.from.id));
             }
             return ctx.scene.leave();
@@ -265,7 +268,7 @@ if (bot) {
             else return;
             await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
             await setDoc(doc(db, 'users', String(ctx.from.id)), { media_id: mid, media_type: mtype, updated_at: serverTimestamp() }, { merge: true });
-            await ctx.reply('✅ Фото обновлено!', mainMenu); await showMyProfile(ctx, String(ctx.from.id)); return ctx.scene.leave();
+            await ctx.reply('✅ Фото обновлено!', { reply_markup: { remove_keyboard: true } }); await showMyProfile(ctx, String(ctx.from.id)); return ctx.scene.leave();
         }
     );
     const quickBioWizard = new WizardScene(
@@ -278,7 +281,7 @@ if (bot) {
             if (ctx.message?.text) {
                 await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
                 await setDoc(doc(db, 'users', String(ctx.from.id)), { bio: ctx.message.text.substring(0, 300), updated_at: serverTimestamp() }, { merge: true });
-                await ctx.reply('✅ Описание обновлено!', mainMenu); await showMyProfile(ctx, String(ctx.from.id));
+                await ctx.reply('✅ Описание обновлено!', { reply_markup: { remove_keyboard: true } }); await showMyProfile(ctx, String(ctx.from.id));
             }
             return ctx.scene.leave();
         }
@@ -293,7 +296,7 @@ if (bot) {
             if (ctx.message?.text) {
                 await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
                 await setDoc(doc(db, 'users', String(ctx.from.id)), { city: ctx.message.text.substring(0, 50), updated_at: serverTimestamp() }, { merge: true });
-                await ctx.reply('✅ Город обновлен!', mainMenu); await showMyProfile(ctx, String(ctx.from.id));
+                await ctx.reply('✅ Город обновлен!', { reply_markup: { remove_keyboard: true } }); await showMyProfile(ctx, String(ctx.from.id));
             }
             return ctx.scene.leave();
         }
@@ -314,7 +317,7 @@ if (bot) {
                 }
                 await del(ctx, ctx.message.message_id); await del(ctx, ctx.wizard.state.l);
                 await setDoc(doc(db, 'users', String(ctx.from.id)), { age, updated_at: serverTimestamp() }, { merge: true });
-                await ctx.reply('✅ Возраст обновлен!', mainMenu); await showMyProfile(ctx, String(ctx.from.id));
+                await ctx.reply('✅ Возраст обновлен!', { reply_markup: { remove_keyboard: true } }); await showMyProfile(ctx, String(ctx.from.id));
             }
             return ctx.scene.leave();
         }
@@ -329,7 +332,7 @@ if (bot) {
                 await ctx.answerCbQuery('🔄 Идет обновление бота...', { show_alert: false }).catch(()=>{});
             }
             if (ctx.scene) await ctx.scene.leave().catch(()=>{});
-            await ctx.reply('🔄 <b>Бот был обновлен.</b>\nСессия восстановлена, продолжаем работу! 👇', { parse_mode: 'HTML', ...mainMenu }).catch(()=>{});
+            await ctx.reply('🔄 <b>Бот был обновлен.</b>\nСессия восстановлена, продолжаем работу! 👇', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } }).catch(()=>{});
         } catch(e) {
             console.error("Recovery failed", e);
         }
@@ -348,7 +351,7 @@ if (bot) {
 
         if (userDoc.exists()) {
             if (userDoc.data().banned) return ctx.reply('⛔ <b>Ваш аккаунт заблокирован.</b>', { parse_mode: 'HTML' });
-            await ctx.reply('<b>С возвращением!</b> Нажимай «🔥 Лента», чтобы продолжить поиск! 💘', { parse_mode: 'HTML', ...mainMenu });
+            await ctx.reply('<b>С возвращением!</b> Нажимай /search, чтобы продолжить поиск! 💘', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
         } else {
             let premiumUntil = 0;
             if (payload && payload !== uid) {
@@ -385,19 +388,16 @@ if (bot) {
         }
     });
 
-    // ----------------------------------------
-    // MAIN MENU & MY PROFILE UI
-    // ----------------------------------------
-    bot.hears('Настройки', async (ctx: any) => {
-        ctx.scene.enter('interest-wizard');
+    bot.command('complaint', (ctx) => {
+        ctx.reply('🚫 <b>Жалоба</b>\nЕсли вы обнаружили фейк, мошенника или неприемлемый контент, пожалуйста, сделайте скриншот анкеты и перешлите его администраторам. Вы также можете использовать кнопку пожаловаться (если она включена).', { parse_mode: 'HTML' });
     });
 
-    bot.hears('VIP / Профиль', async (ctx: any) => {
+    bot.command('premium', async (ctx: any) => {
         const uid = String(ctx.from.id);
         const userDoc = await getDoc(doc(db, 'users', uid));
         const d = userDoc.exists() ? userDoc.data() : null;
         
-        let text = '<b>Профиль и Настройки</b>\n\nЗдесь вы можете настроить свою анкету или получить VIP.';
+        let text = '<b>Premium Статус</b> ⭐\n\nPremium поднимает вашу анкету в выдаче!';
         let premBtnText = '💎 VIP-буст (ПЛАТНО)';
 
         if (d && d.is_premium) {
@@ -406,7 +406,6 @@ if (bot) {
         }
 
         const kbd = Markup.inlineKeyboard([
-            [{ text: '👤 Моя Анкета', callback_data: 'my_profile' }],
             [{ text: premBtnText, callback_data: 'buy_premium' }],
             [{ text: '🎁 Привести друга (Бесплатный VIP)', callback_data: 'ref_friend' }]
         ]);
@@ -427,6 +426,9 @@ if (bot) {
         await ctx.reply(copyText);
     });
 
+    bot.command('myprofile', async (ctx: any) => {
+        await showMyProfile(ctx, String(ctx.from.id));
+    });
     bot.action('my_profile', async (ctx: any) => {
         await ctx.answerCbQuery();
         await showMyProfile(ctx, String(ctx.from.id));
@@ -435,6 +437,7 @@ if (bot) {
     async function showMyProfile(ctx: any, telegramId: string) {
         if (ctx.session?.myProfileMsgId) {
             await del(ctx, ctx.session.myProfileMsgId);
+            await del(ctx, ctx.session.myProfileMenuMsgId);
         }
         
         const userDoc = await getDoc(doc(db, 'users', telegramId));
@@ -443,21 +446,50 @@ if (bot) {
         
         if (!d.media_id && d.photo_url) { d.media_id = d.photo_url; d.media_type = 'photo'; }
         
-        const statusIndicator = d.active ? '<b>СТАТУС: АКТИВНА</b>' : '<b>СТАТУС: СКРЫТА</b>';
-        const caption = `${statusIndicator}\n\n${formatCard(d)}`;
+        const caption = formatCard(d);
+        const sentMsg = await sendMedia(ctx, d, caption, undefined);
+        
+        const menuText = `Так выглядит твоя анкета:\n\n1. Смотреть анкеты.\n2. Заполнить анкету заново.\n3. Изменить фото/видео.\n4. Изменить текст анкеты.\n5. Изменить возраст и город.\n***\n6. Активируй Premium — будь в топе ⭐\n7. 📊 Статистика анкеты`;
         
         const kbd = Markup.inlineKeyboard([
-            [{ text: 'Изменить профиль', callback_data: 'edit_profile' }],
-            [{ text: '📊 Статистика анкеты', callback_data: 'my_stats' }],
-            [{ text: d.active ? 'Скрыть анкету (Пауза)' : 'Включить поиск', callback_data: 'toggle_active' }]
+            [
+                Markup.button.callback('1 🚀', 'btn_search'),
+                Markup.button.callback('2', 'full_edit'),
+                Markup.button.callback('3', 'quick_photo'),
+                Markup.button.callback('4', 'quick_bio'),
+                Markup.button.callback('5', 'btn_params')
+            ],
+            [
+                Markup.button.callback('6 ⭐', 'buy_premium'),
+                Markup.button.callback('7 📊', 'my_stats')
+            ]
         ]);
         
-        const sentMsg = await sendMedia(ctx, d, caption, kbd.reply_markup);
-        if (sentMsg) {
+        const menuMsg = await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd, reply_markup: { remove_keyboard: true } });
+        
+        if (sentMsg && menuMsg) {
             if (!ctx.session) ctx.session = {};
             ctx.session.myProfileMsgId = sentMsg.message_id;
+            ctx.session.myProfileMenuMsgId = menuMsg.message_id;
         }
     }
+
+    bot.action('btn_search', async (ctx: any) => {
+        await ctx.answerCbQuery();
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        await showNextProfile(ctx, String(ctx.from.id));
+    });
+
+    bot.action('btn_params', async (ctx: any) => {
+        await ctx.answerCbQuery();
+        await ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+                [{ text: 'Изменить город', callback_data: 'quick_city' }],
+                [{ text: 'Изменить возраст', callback_data: 'quick_age' }],
+                [{ text: 'Назад', callback_data: 'my_profile' }]
+            ]
+        }).catch(()=>{});
+    });
 
     bot.action('my_stats', async (ctx: any) => {
         const uid = String(ctx.from.id);
@@ -484,19 +516,11 @@ if (bot) {
         }
     });
 
-    bot.action('edit_profile', async (ctx: any) => { 
-        await ctx.answerCbQuery();
-        await ctx.editMessageReplyMarkup({
-            inline_keyboard: [
-                [{ text: 'Фото', callback_data: 'quick_photo' }, { text: 'Текст', callback_data: 'quick_bio' }],
-                [{ text: 'Город', callback_data: 'quick_city' }, { text: 'Возраст', callback_data: 'quick_age' }],
-                [{ text: 'Заполнить заново (Всё)', callback_data: 'full_edit' }],
-                [{ text: 'Назад', callback_data: 'my_profile' }]
-            ]
-        }).catch(()=>{});
-    });
-    
     bot.action('full_edit', async (ctx: any) => { 
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        ctx.scene.enter('profile-wizard');
+    });
+    bot.action('edit_profile', async (ctx: any) => { 
         if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
         ctx.scene.enter('profile-wizard');
     });
@@ -546,7 +570,7 @@ if (bot) {
             if (myProfile.banned) {
                 return ctx.reply('⛔ <b>Ваш аккаунт заблокирован за нарушение правил.</b>', { parse_mode: 'HTML' });
             }
-            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nЗайди в меню, чтобы включить её.', { parse_mode: 'HTML', ...mainMenu });
+            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nЗайди в меню /myprofile, чтобы включить её.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
 
             const intQuery = query(collection(db, 'interactions'), where('from_user_id', '==', telegramId));
             const interactions = await getDocs(intQuery);
@@ -645,8 +669,8 @@ if (bot) {
             }
             
             if (!candidateToShow) {
-                if (searchQuery) return ctx.reply(`<b>Нет анкет со словом:</b> <i>${searchQuery}</i> 🏜️\n\nНажми «🔥 Лента», чтобы смотреть всех!`, { parse_mode: 'HTML', ...mainMenu });
-                return ctx.reply('<b>Пока что никого больше нет!</b> 🏜️\nЗагляни чуть позже.', { parse_mode: 'HTML', ...mainMenu });
+                if (searchQuery) return ctx.reply(`<b>Нет анкет со словом:</b> <i>${searchQuery}</i> 🏜️\n\nНажми /search, чтобы сбросить фильтр!`, { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+                return ctx.reply('<b>Пока что никого больше нет!</b> 🏜️\nЗагляни чуть позже.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
             }
             
             const header = searchQuery ? `🎯 ✨ <b>Фильтр:</b> <i>«${searchQuery}»</i>\n\n` : '';
@@ -654,25 +678,32 @@ if (bot) {
             
             const kbd = Markup.inlineKeyboard([
                 [ 
-                    { text: '👎', callback_data: `dislike_${candidateToShow.telegram_id}` },
                     { text: '❤️', callback_data: `like_${candidateToShow.telegram_id}` },
-                    { text: '⭐ Супер', callback_data: `superlike_${candidateToShow.telegram_id}` }
-                ],
-                [ 
-                    { text: 'Пожаловаться', callback_data: `reportP_${candidateToShow.telegram_id}` }
+                    { text: '💌', callback_data: `superlike_${candidateToShow.telegram_id}` },
+                    { text: '👎', callback_data: `dislike_${candidateToShow.telegram_id}` },
+                    { text: '💤', callback_data: `action_sleep` }
                 ]
             ]);
             
             await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
             
-        } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', mainMenu); }
+        } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', { reply_markup: { remove_keyboard: true } }); }
     }
+
+    bot.action('action_sleep', async (ctx: any) => {
+        await ctx.answerCbQuery();
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
+        await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
+    });
 
     bot.hears('Лента', async (ctx: any) => {
         if (ctx.session) ctx.session.currentSearchQuery = null; 
         await showNextProfile(ctx, String(ctx.from.id));
     });
-    bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
+    bot.command('search', async (ctx: any) => {
+        if (ctx.session) ctx.session.currentSearchQuery = null;
+        await showNextProfile(ctx, String(ctx.from?.id));
+    });
 
     const isSuperAdmin = (ctx: any) => {
         const uid = String(ctx.from?.id);
@@ -971,12 +1002,12 @@ if (bot) {
 
         if (payload && payload.startsWith('SL_')) {
             const toUserId = payload.replace('SL_', '');
-            await ctx.reply('⭐️ Оплата прошла успешно! Ваш суперлайк отправлен.', { reply_markup: mainMenu });
+            await ctx.reply('⭐️ Оплата прошла успешно! Ваш суперлайк отправлен.', { reply_markup: { remove_keyboard: true } });
             await sendSuperLikeLogic(ctx, fromUserId, toUserId);
             await showNextProfile(ctx, fromUserId);
         } else if (payload === 'PREMIUM_PAY') {
             await setDoc(doc(db, 'users', fromUserId), { is_premium: true }, { merge: true });
-            await ctx.reply('💎 <b>Premium-буст активирован!</b>\nТеперь вашу анкету увидит гораздо больше людей.', { parse_mode: 'HTML', reply_markup: mainMenu });
+            await ctx.reply('💎 <b>Premium-буст активирован!</b>\nТеперь вашу анкету увидит гораздо больше людей.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
         }
     });
 
@@ -1095,13 +1126,13 @@ if (bot) {
     bot.on('callback_query', async (ctx: any) => {
         await ctx.answerCbQuery('🔄 Меню обновлено!', { show_alert: false }).catch(()=>{});
         if (ctx.scene) await ctx.scene.leave().catch(()=>{});
-        await ctx.reply('🔄 <b>Бот был переведен на новую версию.</b>\nСвязь восстановлена, выберите действие в меню 👇', { parse_mode: 'HTML', ...mainMenu }).catch(()=>{});
+        await ctx.reply('🔄 <b>Бот был переведен на новую версию.</b>\nСвязь восстановлена, выберите действие в меню /myprofile или /search 👇', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } }).catch(()=>{});
     });
 
     // Если пользователь отправил текст/медиа вне сцены и не попал ни в одну кнопку (бот перезагрузился и т.д.)
     bot.on('message', async (ctx: any) => {
         if (ctx.scene) await ctx.scene.leave().catch(()=>{});
-        await ctx.reply('🔄 <b>Я всегда на связи!</b>\nЕсли что-то зависло, я автоматически обновил сессию.\n\nЖми пункт меню ниже 👇', { parse_mode: 'HTML', ...mainMenu }).catch(()=>{});
+        await ctx.reply('🔄 <b>Я всегда на связи!</b>\nЕсли что-то зависло, я автоматически обновил сессию.\n\nЖми /search или /myprofile 👇', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } }).catch(()=>{});
     });
 
     // Инициализация Webhooks или Long Polling
