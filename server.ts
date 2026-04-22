@@ -443,9 +443,10 @@ if (bot) {
     });
 
     async function showMyProfile(ctx: any, telegramId: string) {
-        if (ctx.session?.myProfileMsgId) {
-            await del(ctx, ctx.session.myProfileMsgId);
-            await del(ctx, ctx.session.myProfileMenuMsgId);
+        if (ctx.session) {
+            if (ctx.session.myProfileMsgId) { await del(ctx, ctx.session.myProfileMsgId); ctx.session.myProfileMsgId = null; }
+            if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId); ctx.session.myProfileMenuMsgId = null; }
+            if (ctx.session.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
         }
         
         const userDoc = await getDoc(doc(db, 'users', telegramId));
@@ -461,7 +462,7 @@ if (bot) {
         
         const kbd = Markup.keyboard([
             ['1 🚀', '2', '3', '4', '5'],
-            ['6 ⭐', '7 📊', '/myprofile']
+            ['6 ⭐', '7 📊']
         ]).resize();
         
         const menuMsg = await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd });
@@ -733,7 +734,12 @@ if (bot) {
             if (!ctx.session) ctx.session = {};
             ctx.session.candidate_id = candidateToShow.telegram_id;
             
-            await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
+            if (ctx.session.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
+            if (ctx.session.myProfileMsgId) { await del(ctx, ctx.session.myProfileMsgId); ctx.session.myProfileMsgId = null; }
+            if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId); ctx.session.myProfileMenuMsgId = null; }
+            
+            const sentMsg = await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
+            if (sentMsg) ctx.session.lastSearchMsgId = sentMsg.message_id;
             
         } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', { reply_markup: { remove_keyboard: true } }); }
     }
@@ -810,6 +816,7 @@ if (bot) {
 
     bot.hears('💤', async (ctx: any) => {
         if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session?.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
         await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
     });
 
