@@ -867,9 +867,6 @@ if (bot) {
 
     // Инициализация Webhooks или Long Polling
     const webhookDomain = process.env.WEBHOOK_DOMAIN;
-    
-    // ВРЕМЕННО ОТКЛЮЧАЕМ РЕЖИМ ЛОКАЛЬНОГО ОПРОСА В AI STUDIO (УСТРАНЕНИЕ ОШИБКИ 409 НА AMVERA)
-    const disableLocalPolling = true; // Измените на false, если захотите вернуть работу бота в AI Studio
 
     if (webhookDomain) {
         try {
@@ -889,12 +886,12 @@ if (bot) {
         } catch (e) {
             console.error("Webhook Setup Error:", e);
         }
-    } else if (!disableLocalPolling) {
-        // Запуск через Long Polling (Для среды разработки AI Studio)
+    } else {
+        // Запуск через Long Polling
         try {
             await bot.telegram.deleteWebhook({ drop_pending_updates: true });
             bot.launch();
-            console.log('🚀 Bot is running in Long Polling mode (Development)...');
+            console.log('🚀 Bot is running in Long Polling mode...');
         } catch (e: any) {
             if (e.response && e.response.error_code === 409) {
                 console.error('⛔ СONFLICT: Another instance of the bot is already running. Please stop it or use Webhooks.');
@@ -902,8 +899,6 @@ if (bot) {
                 console.error("Long Polling Error:", e);
             }
         }
-    } else {
-        console.log('⛔ Local Polling is deliberately DISABLED in AI Studio to allow the bot to run correctly on Amvera without 409 conflicts.');
     }
 
     const port = process.env.PORT || 3000;
