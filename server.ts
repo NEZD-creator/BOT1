@@ -473,21 +473,59 @@ if (bot) {
         }
     }
 
+    bot.hears('1', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session?.in_sleep_menu) {
+            ctx.session.in_sleep_menu = false;
+            await showNextProfile(ctx, String(ctx.from.id));
+        }
+    });
+
     bot.hears('1 🚀', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         await showNextProfile(ctx, String(ctx.from.id));
     });
     bot.hears('2', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
-        ctx.scene.enter('profile-wizard');
+        if (ctx.session?.in_sleep_menu) {
+            ctx.session.in_sleep_menu = false;
+            await showMyProfile(ctx, String(ctx.from.id));
+        } else {
+            ctx.scene.enter('profile-wizard');
+        }
     });
     bot.hears('3', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
-        ctx.scene.enter('quick-photo');
+        if (ctx.session?.in_sleep_menu) {
+            ctx.session.in_sleep_menu = false;
+            ctx.session.confirm_disable = true;
+            const kbd = Markup.keyboard([['😴 Отключить анкету']]).resize();
+            await ctx.reply('Так ты не узнаешь, что кому-то нравишься... Точно хочешь отключить свою анкету?', { ...kbd });
+        } else {
+            ctx.scene.enter('quick-photo');
+        }
+    });
+    bot.hears('😴 Отключить анкету', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session?.confirm_disable) {
+             ctx.session.confirm_disable = false;
+             const uid = String(ctx.from.id);
+             await setDoc(doc(db, 'users', uid), { active: false }, { merge: true });
+             await ctx.reply('Надеюсь ты нашел кого-то благодаря мне! Рад был с тобой пообщаться, будет скучно — пиши, обязательно найдем тебе кого-нибудь ❤️', { reply_markup: { remove_keyboard: true } });
+        }
     });
     bot.hears('4', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
-        ctx.scene.enter('quick-bio');
+        if (ctx.session?.in_sleep_menu) {
+            ctx.session.in_sleep_menu = false;
+            ctx.match = ['buy_premium']; 
+            bot.handleUpdate({
+                 update_id: Date.now(),
+                 message: { message_id: Date.now(), date: Date.now(), chat: ctx.chat, from: ctx.from, text: '/premium' }
+            } as any);
+        } else {
+            ctx.scene.enter('quick-bio');
+        }
     });
     bot.hears('5', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
@@ -596,17 +634,6 @@ if (bot) {
         ctx.session.view_likes_mode = true;
         await showNextProfile(ctx, String(ctx.from.id));
     });
-    bot.action('toggle_active', async (ctx: any) => {
-        const uid = String(ctx.from.id);
-        const ref = doc(db, 'users', uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            const newState = !snap.data().active;
-            await setDoc(ref, { active: newState }, { merge: true });
-            ctx.answerCbQuery(newState ? 'Анкета включена! 🚀' : 'Анкета спрятана! 💤');
-            await showMyProfile(ctx, uid);
-        }
-    });
 
     // ----------------------------------------
     // DISCOVERY SYSTEM (SMART MATCHING & PREMIUM)
@@ -620,7 +647,10 @@ if (bot) {
             if (myProfile.banned) {
                 return ctx.reply('⛔ <b>Ваш аккаунт заблокирован за нарушение правил.</b>', { parse_mode: 'HTML' });
             }
-            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nЗайди в меню /myprofile, чтобы включить её.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+            if (!myProfile.active) {
+                await setDoc(doc(db, 'users', telegramId), { active: true }, { merge: true });
+                myProfile.active = true;
+            }
 
             const intQuery = query(collection(db, 'interactions'), where('from_user_id', '==', telegramId));
             const interactions = await getDocs(intQuery);
@@ -810,13 +840,17 @@ if (bot) {
     });
 
     bot.hears('💤', async (ctx: any) => {
-        await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
-    });
-
-    bot.action('action_sleep', async (ctx: any) => {
-        await ctx.answerCbQuery();
-        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
-        await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (!ctx.session) ctx.session = {};
+        ctx.session.in_sleep_menu = true;
+        
+        const text = `Подождем пока кто-то увидит твою анкету\n\n1. Смотреть анкеты.\n2. Моя анкета.\n3. Я больше не хочу никого искать.\n***\n4. Активируй Premium — будь в топе ⭐`;
+        const kbd = Markup.keyboard([
+            ['1', '2', '3'],
+            ['4']
+        ]).resize();
+        
+        await ctx.reply(text, { parse_mode: 'HTML', ...kbd });
     });
 
     bot.hears('Лента', async (ctx: any) => {
