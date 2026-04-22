@@ -444,6 +444,7 @@ if (bot) {
 
     async function showMyProfile(ctx: any, telegramId: string) {
         if (ctx.session) {
+            ctx.session.menuContext = null;
             if (ctx.session.myProfileMsgId) { await del(ctx, ctx.session.myProfileMsgId); ctx.session.myProfileMsgId = null; }
             if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId); ctx.session.myProfileMenuMsgId = null; }
             if (ctx.session.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
@@ -478,17 +479,40 @@ if (bot) {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         await showNextProfile(ctx, String(ctx.from.id));
     });
+    bot.hears('1', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session?.menuContext === 'sleep') {
+            await showNextProfile(ctx, String(ctx.from.id));
+        }
+    });
+
     bot.hears('2', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
-        ctx.scene.enter('profile-wizard');
+        if (ctx.session?.menuContext === 'sleep') {
+            await showMyProfile(ctx, String(ctx.from.id));
+        } else {
+            ctx.scene.enter('profile-wizard');
+        }
     });
     bot.hears('3', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
-        ctx.scene.enter('quick-photo');
+        if (ctx.session?.menuContext === 'sleep') {
+            const kbd = Markup.keyboard([['😴 Отключить анкету']]).resize();
+            await ctx.reply('Так ты не узнаешь, что кому-то нравишься... Точно хочешь отключить свою анкету?', kbd);
+        } else {
+            ctx.scene.enter('quick-photo');
+        }
     });
     bot.hears('4', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
-        ctx.scene.enter('quick-bio');
+        if (ctx.session?.menuContext === 'sleep') {
+            bot.handleUpdate({
+                 update_id: Date.now(),
+                 message: { message_id: Date.now(), date: Date.now(), chat: ctx.chat, from: ctx.from, text: '/premium' }
+            } as any);
+        } else {
+            ctx.scene.enter('quick-bio');
+        }
     });
     bot.hears('5', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
@@ -732,6 +756,7 @@ if (bot) {
             ]).resize();
             
             if (!ctx.session) ctx.session = {};
+            ctx.session.menuContext = null;
             ctx.session.candidate_id = candidateToShow.telegram_id;
             
             if (ctx.session.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
@@ -817,7 +842,27 @@ if (bot) {
     bot.hears('💤', async (ctx: any) => {
         if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
         if (ctx.session?.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
-        await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
+        
+        await ctx.reply('Подождем пока кто-то увидит твою анкету', { reply_markup: { remove_keyboard: true } });
+        
+        if (!ctx.session) ctx.session = {};
+        ctx.session.menuContext = 'sleep';
+        
+        const menuText = `1. Смотреть анкеты.\n2. Моя анкета.\n3. Я больше не хочу никого искать.\n***\n4. Активируй Premium — будь в топе ⭐`;
+        const kbd = Markup.keyboard([
+            ['1', '2', '3'],
+            ['4']
+        ]).resize();
+        await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd });
+    });
+
+    bot.hears('😴 Отключить анкету', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session) ctx.session.menuContext = null;
+        
+        const uid = String(ctx.from.id);
+        await setDoc(doc(db, 'users', uid), { active: false }, { merge: true });
+        await ctx.reply('Надеюсь ты нашел кого-то благодаря мне! Рад был с тобой пообщаться, будет скучно — пиши, обязательно найдем тебе кого-нибудь ❤️', { reply_markup: { remove_keyboard: true } });
     });
 
     bot.action('action_sleep', async (ctx: any) => {
