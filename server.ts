@@ -875,7 +875,15 @@ if (bot) {
         try {
             console.log(`Configuring Webhook for: ${webhookDomain}/telegraf`);
             await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+            
+            // Важно: Telegraf сам парсит JSON, если использовать его как middleware
             expressApp.use(bot.webhookCallback('/telegraf'));
+            
+            // Настроим дополнительный эндпоинт для проверки здоровья сервера (чтобы мы могли зайти на сайт и проверить работает ли код)
+            expressApp.get('/', (req, res) => {
+                res.send('Бот запущен и работает! Webhooks активны.');
+            });
+
             await bot.telegram.setWebhook(`${webhookDomain}/telegraf`, { drop_pending_updates: true });
             console.log(`🚀 Bot is running in Webhook mode!`);
         } catch (e) {
