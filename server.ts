@@ -342,6 +342,14 @@ if (bot) {
     bot.use(stage.middleware() as any);
 
     bot.start(async (ctx: any) => {
+        bot.telegram.setMyCommands([
+            { command: 'search', description: '🚀 Смотреть анкеты' },
+            { command: 'myprofile', description: '👤 Моя анкета' },
+            { command: 'premium', description: '⭐ Premium' },
+            { command: 'complaint', description: '🚫 Пожаловаться' },
+            { command: 'stats', description: '📊 Статистика (Админы)' }
+        ]).catch(()=>{});
+
         const uid = String(ctx.from?.id);
         const refDoc = doc(db, 'users', uid);
         const userDoc = await getDoc(refDoc);
@@ -451,21 +459,12 @@ if (bot) {
         
         const menuText = `Так выглядит твоя анкета:\n\n1. Смотреть анкеты.\n2. Заполнить анкету заново.\n3. Изменить фото/видео.\n4. Изменить текст анкеты.\n5. Изменить возраст и город.\n***\n6. Активируй Premium — будь в топе ⭐\n7. 📊 Статистика анкеты`;
         
-        const kbd = Markup.inlineKeyboard([
-            [
-                Markup.button.callback('1 🚀', 'btn_search'),
-                Markup.button.callback('2', 'full_edit'),
-                Markup.button.callback('3', 'quick_photo'),
-                Markup.button.callback('4', 'quick_bio'),
-                Markup.button.callback('5', 'btn_params')
-            ],
-            [
-                Markup.button.callback('6 ⭐', 'buy_premium'),
-                Markup.button.callback('7 📊', 'my_stats')
-            ]
-        ]);
+        const kbd = Markup.keyboard([
+            ['1 🚀', '2', '3', '4', '5'],
+            ['6 ⭐', '7 📊', '/myprofile']
+        ]).resize();
         
-        const menuMsg = await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd, reply_markup: { remove_keyboard: true } });
+        const menuMsg = await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd });
         
         if (sentMsg && menuMsg) {
             if (!ctx.session) ctx.session = {};
@@ -473,6 +472,57 @@ if (bot) {
             ctx.session.myProfileMenuMsgId = menuMsg.message_id;
         }
     }
+
+    bot.hears('1 🚀', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        await showNextProfile(ctx, String(ctx.from.id));
+    });
+    bot.hears('2', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        ctx.scene.enter('profile-wizard');
+    });
+    bot.hears('3', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        ctx.scene.enter('quick-photo');
+    });
+    bot.hears('4', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        ctx.scene.enter('quick-bio');
+    });
+    bot.hears('5', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        await ctx.reply('Что именно изменить?', Markup.inlineKeyboard([
+            [{ text: 'Изменить город', callback_data: 'quick_city' }],
+            [{ text: 'Изменить возраст', callback_data: 'quick_age' }]
+        ]));
+    });
+    bot.hears('6 ⭐', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        // Call the exact same logic as buy_premium callback
+        ctx.match = ['buy_premium']; 
+        // We reuse the command logic easily
+        bot.handleUpdate({
+             update_id: Date.now(),
+             message: { message_id: Date.now(), date: Date.now(), chat: ctx.chat, from: ctx.from, text: '/premium' }
+        } as any);
+    });
+    bot.hears('7 📊', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        const uid = String(ctx.from.id);
+        try {
+            const snap = await getDocs(query(collection(db, 'interactions'), where('to_user_id', '==', uid)));
+            let views = 0; let likes = 0; let superlikes = 0;
+            snap.forEach(d => {
+                views++;
+                const data = d.data();
+                if (data.type === 'like') { likes++; if (data.is_superlike) superlikes++; }
+            });
+            await ctx.reply(`📊 Ваша популярность\n\n👁 Показов анкеты: ${views}\n❤️ Получено лайков: ${likes}\n⭐ Из них суперлайков: ${superlikes}`);
+        } catch (e) {
+            console.error(e);
+            await ctx.reply('Не удалось загрузить данные');
+        }
+    });
 
     bot.action('btn_search', async (ctx: any) => {
         await ctx.answerCbQuery();
@@ -676,19 +726,92 @@ if (bot) {
             const header = searchQuery ? `🎯 ✨ <b>Фильтр:</b> <i>«${searchQuery}»</i>\n\n` : '';
             const caption = header + formatCard(candidateToShow);
             
-            const kbd = Markup.inlineKeyboard([
-                [ 
-                    { text: '❤️', callback_data: `like_${candidateToShow.telegram_id}` },
-                    { text: '💌', callback_data: `superlike_${candidateToShow.telegram_id}` },
-                    { text: '👎', callback_data: `dislike_${candidateToShow.telegram_id}` },
-                    { text: '💤', callback_data: `action_sleep` }
-                ]
-            ]);
+            const kbd = Markup.keyboard([
+                ['❤️', '💌', '👎', '💤']
+            ]).resize();
+            
+            if (!ctx.session) ctx.session = {};
+            ctx.session.candidate_id = candidateToShow.telegram_id;
             
             await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
             
         } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', { reply_markup: { remove_keyboard: true } }); }
     }
+
+    const getCandidateLog = (ctx: any) => {
+        if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
+        const cid = ctx.session?.candidate_id;
+        if (ctx.session) ctx.session.candidate_id = null;
+        return cid;
+    }
+
+    bot.hears('❤️', async (ctx: any) => {
+        const toUserId = getCandidateLog(ctx);
+        if (!toUserId) return;
+        const fromUserId = String(ctx.from?.id);
+        const myDDoc = await getDoc(doc(db, 'users', fromUserId));
+        if(!myDDoc.exists()) return;
+        
+        await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'like', created_at: serverTimestamp() });
+        const incomingSnap = await getDoc(doc(db, 'interactions', `${toUserId}_${fromUserId}`));
+        if (incomingSnap.exists() && incomingSnap.data().type === 'like') {
+            await handleMatch(ctx, fromUserId, toUserId, myDDoc.data()!);
+        } else {
+            await notifyIncomingLike(toUserId);
+        }
+        await showNextProfile(ctx, fromUserId);
+    });
+
+    bot.hears('👎', async (ctx: any) => {
+        const toUserId = getCandidateLog(ctx);
+        if (!toUserId) return;
+        const fromUserId = String(ctx.from?.id);
+        await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'dislike', created_at: serverTimestamp() });
+        await showNextProfile(ctx, fromUserId);
+    });
+
+    bot.hears('💌', async (ctx: any) => {
+        const toUserId = getCandidateLog(ctx);
+        if (!toUserId) return;
+        const fromUserId = String(ctx.from?.id);
+        try {
+            const userRef = doc(db, 'users', fromUserId);
+            const snap = await getDoc(userRef);
+            if (!snap.exists()) return;
+            const d = snap.data();
+            
+            const now = Date.now();
+            let used = d.sl_used_today || 0;
+            let resetTime = d.sl_reset_time || 0;
+            
+            if (now > resetTime) {
+                used = 0;
+                resetTime = now + 24 * 60 * 60 * 1000;
+            }
+            
+            if (used < 2) {
+                used += 1;
+                await setDoc(userRef, { sl_used_today: used, sl_reset_time: resetTime }, { merge: true });
+                await ctx.reply(`🌟 Суперлайк доставлен! (Осталось бесплатных: ${2 - used})`).then((m:any) => setTimeout(()=>del(ctx, m.message_id), 3000));
+                await sendSuperLikeLogic(ctx, fromUserId, toUserId);
+                await showNextProfile(ctx, fromUserId);
+            } else {
+                await ctx.replyWithInvoice({
+                    title: 'Суперлайк 🌟',
+                    description: 'Твои 2 бесплатных суперлайка на сегодня закончились. Отправь суперлайк прямо сейчас за Telegram Звезды!',
+                    payload: `SL_${toUserId}`,
+                    provider_token: '', 
+                    currency: 'XTR',
+                    prices: [{ label: '1 Суперлайк', amount: 10 }]
+                });
+            }
+        } catch(e) {}
+    });
+
+    bot.hears('💤', async (ctx: any) => {
+        if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
+        await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
+    });
 
     bot.action('action_sleep', async (ctx: any) => {
         await ctx.answerCbQuery();
