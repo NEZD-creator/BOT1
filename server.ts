@@ -459,6 +459,58 @@ if (bot) {
     });
     bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
 
+    const isSuperAdmin = (ctx: any) => ctx.from?.username?.toLowerCase() === 'vnezdv';
+
+    bot.command('admin', async (ctx: any) => {
+        const uid = String(ctx.from.id);
+        const confDoc = await getDoc(doc(db, 'config', 'system'));
+        let admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+
+        if (isSuperAdmin(ctx) || admins.includes(uid)) {
+            if (!admins.includes(uid)) {
+                admins.push(uid);
+                await setDoc(doc(db, 'config', 'system'), { admins }, { merge: true });
+            }
+            await ctx.reply('✅ Доступ подтвержден! Панель модератора активна. Вы будете получать жалобы в этот чат.');
+        } else {
+            await ctx.reply('⛔ Отказано в доступе.');
+        }
+    });
+
+    bot.command('add_admin', async (ctx: any) => {
+        if (!isSuperAdmin(ctx)) return ctx.reply('⛔ У вас нет прав (только Создатель может добавлять администраторов).');
+        const args = ctx.message.text.split(' ');
+        if (args.length < 2) return ctx.reply('Использование: /add_admin <telegram_id>');
+        
+        const newAdminId = args[1];
+        const confDoc = await getDoc(doc(db, 'config', 'system'));
+        let admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+        if (!admins.includes(newAdminId)) {
+            admins.push(newAdminId);
+            await setDoc(doc(db, 'config', 'system'), { admins }, { merge: true });
+            await ctx.reply(`✅ ID ${newAdminId} назначен модератором. Теперь он имеет доступ к команде /admin и получению жалоб.`);
+        } else {
+            await ctx.reply('Этот пользователь уже является модератором.');
+        }
+    });
+
+    bot.command('remove_admin', async (ctx: any) => {
+        if (!isSuperAdmin(ctx)) return ctx.reply('⛔ Отказано в доступе.');
+        const args = ctx.message.text.split(' ');
+        if (args.length < 2) return ctx.reply('Использование: /remove_admin <telegram_id>');
+        
+        const remAdminId = args[1];
+        const confDoc = await getDoc(doc(db, 'config', 'system'));
+        let admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+        if (admins.includes(remAdminId)) {
+            admins = admins.filter((id: string) => id !== remAdminId);
+            await setDoc(doc(db, 'config', 'system'), { admins }, { merge: true });
+            await ctx.reply(`❌ ID ${remAdminId} удален из модераторов.`);
+        } else {
+            await ctx.reply('Этот пользователь не был модератором.');
+        }
+    });
+
 
     // ----------------------------------------
     // INTERACTIONS (LIKE / DISLIKE / SUPERLIKE )
@@ -654,7 +706,24 @@ if (bot) {
                 ]);
                 
                 try {
-                    await bot.telegram.sendMessage(ADMIN_CHAT_ID, repMsg, { parse_mode: 'HTML', ...adminKbd });
+                    const confDoc = await getDoc(doc(db, 'config', 'system'));
+                    let admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+                    
+                    if (admins.length === 0) {
+                        const q = query(collection(db, 'users'), where('username', '==', 'vNEZDv'));
+                        const snaps = await getDocs(q);
+                        if (!snaps.empty) {
+                            admins = [snaps.docs[0].data().telegram_id];
+                        }
+                    }
+                    
+                    if (admins.length > 0) {
+                        for (const adminId of admins) {
+                            bot.telegram.sendMessage(adminId, repMsg, { parse_mode: 'HTML', ...adminKbd }).catch(()=>{});
+                        }
+                    } else {
+                        console.error('Не удалось найти ID администратора.');
+                    }
                 } catch(e) { console.error("Failed to prompt admin:", e); }
             }
         } catch(e) { console.error('Error reporting logic', e); }
@@ -663,19 +732,31 @@ if (bot) {
     });
 
     // ADMIN ACTIONS
+    const checkIsAdminAction = async (ctx: any): Promise<boolean> => {
+        if (isSuperAdmin(ctx)) return true;
+        const confDoc = await getDoc(doc(db, 'config', 'system'));
+        const admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+        if (admins.includes(String(ctx.from.id))) return true;
+        await ctx.answerCbQuery('У вас нет прав!', { showAlert: true });
+        return false;
+    };
+
     bot.action(/^admBan_(.+)$/, async (ctx: any) => {
+        if (!(await checkIsAdminAction(ctx))) return;
         const targetId = ctx.match[1];
         await setDoc(doc(db, 'users', targetId), { active: false, banned: true }, { merge: true });
         await ctx.answerCbQuery('Пользователь заблокирован навсегда!');
         await ctx.editMessageText('✅ Модерация:\n⛔ ПОЛЬЗОВАТЕЛЬ ЗАБЛОКИРОВАН').catch(()=>{});
     });
     bot.action(/^admShadow_(.+)$/, async (ctx: any) => {
+        if (!(await checkIsAdminAction(ctx))) return;
         const targetId = ctx.match[1];
         await setDoc(doc(db, 'users', targetId), { shadowbanned: true }, { merge: true });
         await ctx.answerCbQuery('Теневой бан активирован!');
         await ctx.editMessageText('✅ Модерация:\n👻 ВЫДАН ТЕНЕВОЙ БАН').catch(()=>{});
     });
     bot.action('admOk_0', async (ctx: any) => {
+        if (!(await checkIsAdminAction(ctx))) return;
         await ctx.answerCbQuery('Отклонено');
         await ctx.editMessageText('✅ Модерация:\nЖАЛОБА ОТКЛОНЕНА').catch(()=>{});
     });

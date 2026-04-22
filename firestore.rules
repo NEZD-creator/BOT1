@@ -13,5 +13,8 @@ service cloud.firestore {
     match /interactions/{interactionId} {
       allow read, write: if true;
     }
+    match /config/{configId} {
+      allow read, write: if true;
+    }
   }
 }
