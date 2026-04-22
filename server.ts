@@ -443,6 +443,11 @@ if (bot) {
     });
 
     async function showMyProfile(ctx: any, telegramId: string) {
+        if (ctx.session?.myProfileMsgId) {
+            await del(ctx, ctx.session.myProfileMsgId);
+            await del(ctx, ctx.session.myProfileMenuMsgId);
+        }
+        
         const userDoc = await getDoc(doc(db, 'users', telegramId));
         if (!userDoc.exists()) return ctx.reply('У тебя еще нет профиля!', Markup.inlineKeyboard([[{ text: '📝 Создать анкету', callback_data: 'edit_profile' }]]));
         const d = userDoc.data()!;
@@ -737,9 +742,7 @@ if (bot) {
         const cid = ctx.session?.candidate_id;
         if (ctx.session) ctx.session.candidate_id = null;
         
-        // Remove only the user's reaction message (which triggered the handler), so the history of profiles stays untouched
-        if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
-        // We do *not* delete the profile card message
+        // As requested: the candidate profiles and user interactions (like emojis) stay in the chat history.
         return cid;
     }
 
@@ -807,7 +810,6 @@ if (bot) {
     });
 
     bot.hears('💤', async (ctx: any) => {
-        if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
         await ctx.reply('💤 Поиск приостановлен.\nВы можете вернуться к анкетам, нажав /search, или изменить свою анкету в /myprofile.', { reply_markup: { remove_keyboard: true } });
     });
 
