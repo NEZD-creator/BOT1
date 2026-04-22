@@ -870,6 +870,7 @@ if (bot) {
     
     if (webhookDomain) {
         // Запуск через Webhook (Рекомендуется для Cloud Run / 24/7 VPS)
+        await bot.telegram.deleteWebhook();
         expressApp.use(bot.webhookCallback('/telegraf'));
         bot.telegram.setWebhook(`${webhookDomain}/telegraf`)
             .then(() => console.log(`🚀 Bot is running in Webhook mode: ${webhookDomain}/telegraf`));
