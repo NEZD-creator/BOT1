@@ -434,7 +434,14 @@ if (bot) {
         await ctx.reply(copyText);
     });
 
+    bot.command('search', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session) ctx.session.currentSearchQuery = null;
+        await showNextProfile(ctx, String(ctx.from?.id));
+    });
+
     bot.command('myprofile', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         await showMyProfile(ctx, String(ctx.from.id));
     });
     bot.action('my_profile', async (ctx: any) => {
@@ -445,9 +452,7 @@ if (bot) {
     async function showMyProfile(ctx: any, telegramId: string) {
         if (ctx.session) {
             ctx.session.menuContext = null;
-            if (ctx.session.myProfileMsgId) { await del(ctx, ctx.session.myProfileMsgId); ctx.session.myProfileMsgId = null; }
-            if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId); ctx.session.myProfileMenuMsgId = null; }
-            if (ctx.session.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
+            if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId).catch(()=>{}); ctx.session.myProfileMenuMsgId = null; }
         }
         
         const userDoc = await getDoc(doc(db, 'users', telegramId));
@@ -468,9 +473,8 @@ if (bot) {
         
         const menuMsg = await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd });
         
-        if (sentMsg && menuMsg) {
+        if (menuMsg) {
             if (!ctx.session) ctx.session = {};
-            ctx.session.myProfileMsgId = sentMsg.message_id;
             ctx.session.myProfileMenuMsgId = menuMsg.message_id;
         }
     }
@@ -482,6 +486,10 @@ if (bot) {
     bot.hears('1', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         if (ctx.session?.menuContext === 'sleep') {
+            if (ctx.session.sleepMenuMsgs) {
+                for (let id of ctx.session.sleepMenuMsgs) await del(ctx, id).catch(()=>{});
+                ctx.session.sleepMenuMsgs = null;
+            }
             await showNextProfile(ctx, String(ctx.from.id));
         }
     });
@@ -489,6 +497,10 @@ if (bot) {
     bot.hears('2', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         if (ctx.session?.menuContext === 'sleep') {
+            if (ctx.session.sleepMenuMsgs) {
+                for (let id of ctx.session.sleepMenuMsgs) await del(ctx, id).catch(()=>{});
+                ctx.session.sleepMenuMsgs = null;
+            }
             await showMyProfile(ctx, String(ctx.from.id));
         } else {
             ctx.scene.enter('profile-wizard');
@@ -497,8 +509,13 @@ if (bot) {
     bot.hears('3', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         if (ctx.session?.menuContext === 'sleep') {
+            if (ctx.session.sleepMenuMsgs) {
+                for (let id of ctx.session.sleepMenuMsgs) await del(ctx, id).catch(()=>{});
+                ctx.session.sleepMenuMsgs = null;
+            }
             const kbd = Markup.keyboard([['😴 Отключить анкету']]).resize();
-            await ctx.reply('Так ты не узнаешь, что кому-то нравишься... Точно хочешь отключить свою анкету?', kbd);
+            const msg = await ctx.reply('Так ты не узнаешь, что кому-то нравишься... Точно хочешь отключить свою анкету?', kbd);
+            ctx.session.sleepConfirmMsgId = msg.message_id;
         } else {
             ctx.scene.enter('quick-photo');
         }
@@ -506,6 +523,10 @@ if (bot) {
     bot.hears('4', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         if (ctx.session?.menuContext === 'sleep') {
+            if (ctx.session.sleepMenuMsgs) {
+                for (let id of ctx.session.sleepMenuMsgs) await del(ctx, id).catch(()=>{});
+                ctx.session.sleepMenuMsgs = null;
+            }
             bot.handleUpdate({
                  update_id: Date.now(),
                  message: { message_id: Date.now(), date: Date.now(), chat: ctx.chat, from: ctx.from, text: '/premium' }
@@ -759,12 +780,9 @@ if (bot) {
             ctx.session.menuContext = null;
             ctx.session.candidate_id = candidateToShow.telegram_id;
             
-            if (ctx.session.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
-            if (ctx.session.myProfileMsgId) { await del(ctx, ctx.session.myProfileMsgId); ctx.session.myProfileMsgId = null; }
-            if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId); ctx.session.myProfileMenuMsgId = null; }
+            if (ctx.session.myProfileMenuMsgId) { await del(ctx, ctx.session.myProfileMenuMsgId).catch(()=>{}); ctx.session.myProfileMenuMsgId = null; }
             
-            const sentMsg = await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
-            if (sentMsg) ctx.session.lastSearchMsgId = sentMsg.message_id;
+            await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
             
         } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', { reply_markup: { remove_keyboard: true } }); }
     }
@@ -840,10 +858,9 @@ if (bot) {
     });
 
     bot.hears('💤', async (ctx: any) => {
-        if (ctx.message) del(ctx, ctx.message.message_id).catch(()=>{});
-        if (ctx.session?.lastSearchMsgId) { await del(ctx, ctx.session.lastSearchMsgId); ctx.session.lastSearchMsgId = null; }
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         
-        await ctx.reply('Подождем пока кто-то увидит твою анкету', { reply_markup: { remove_keyboard: true } });
+        const msg1 = await ctx.reply('Подождем пока кто-то увидит твою анкету', { reply_markup: { remove_keyboard: true } });
         
         if (!ctx.session) ctx.session = {};
         ctx.session.menuContext = 'sleep';
@@ -853,11 +870,17 @@ if (bot) {
             ['1', '2', '3'],
             ['4']
         ]).resize();
-        await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd });
+        const msg2 = await ctx.reply(menuText, { parse_mode: 'HTML', ...kbd });
+        
+        ctx.session.sleepMenuMsgs = [msg1.message_id, msg2.message_id];
     });
 
     bot.hears('😴 Отключить анкету', async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (ctx.session?.sleepConfirmMsgId) {
+             await del(ctx, ctx.session.sleepConfirmMsgId).catch(()=>{});
+             ctx.session.sleepConfirmMsgId = null;
+        }
         if (ctx.session) ctx.session.menuContext = null;
         
         const uid = String(ctx.from.id);
