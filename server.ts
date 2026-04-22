@@ -741,16 +741,19 @@ if (bot) {
             return ctx.reply('⛔ Отказано в доступе. Команда только для администрации.');
         }
 
-        const waitMsg = await ctx.reply('⏳ Собираю статистику баз данных...');
+        const waitMsg = await ctx.reply('⏳ Собираю подробную статистику...');
         
         try {
             const totalUsersSnap = await getCountFromServer(collection(db, 'users'));
             const activeUsersSnap = await getCountFromServer(query(collection(db, 'users'), where('active', '==', true)));
             const premiumUsersSnap = await getCountFromServer(query(collection(db, 'users'), where('is_premium', '==', true)));
+            const boysSnap = await getCountFromServer(query(collection(db, 'users'), where('gender', '==', 'gender_m')));
+            const girlsSnap = await getCountFromServer(query(collection(db, 'users'), where('gender', '==', 'gender_f')));
 
-            const text = `📊 <b>Статистика бота</b>\n\n` +
-                         `👥 <b>Всего зарегистрировано:</b> ${totalUsersSnap.data().count}\n` +
-                         `🔥 <b>Активных анкет (онлайн-база):</b> ${activeUsersSnap.data().count}\n` +
+            const text = `📊 <b>Подробная статистика</b>\n\n` +
+                         `👥 <b>Всего юзеров:</b> ${totalUsersSnap.data().count}\n` +
+                         `🙎‍♂️ <b>Парней:</b> ${boysSnap.data().count} | 🙎‍♀️ <b>Девушек:</b> ${girlsSnap.data().count}\n` +
+                         `🔥 <b>В активном поиске:</b> ${activeUsersSnap.data().count}\n` +
                          `💎 <b>VIP статусов:</b> ${premiumUsersSnap.data().count}`;
 
             await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, text, { parse_mode: 'HTML' });
