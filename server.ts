@@ -519,7 +519,13 @@ if (bot) {
     });
     bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
 
-    const isSuperAdmin = (ctx: any) => ctx.from?.username?.toLowerCase() === 'vnezdv';
+    const isSuperAdmin = (ctx: any) => {
+        const uid = String(ctx.from?.id);
+        const uname = ctx.from?.username ? `@${ctx.from.username}`.toLowerCase() : '';
+        const adminEnv = (process.env.ADMIN_ID || '').toLowerCase();
+        
+        return uname === 'vnezdv' || uname === '@vnezdv' || uid === adminEnv || uname === adminEnv;
+    };
 
     bot.command('admin', async (ctx: any) => {
         const uid = String(ctx.from.id);
@@ -596,6 +602,46 @@ if (bot) {
         } catch (e) {
             console.error(e);
             await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, '❌ Ошибка при получении статистики.');
+        }
+    });
+
+    // MASS MESSAGE TO ALL USERS (BROADCAST)
+    bot.command('broadcast', async (ctx: any) => {
+        const uid = String(ctx.from.id);
+        const confDoc = await getDoc(doc(db, 'config', 'system'));
+        const admins = confDoc.exists() && confDoc.data().admins ? confDoc.data().admins : [];
+
+        if (!isSuperAdmin(ctx) && !admins.includes(uid)) {
+            return ctx.reply('⛔ Отказано в доступе.');
+        }
+
+        const messageText = ctx.message.text.substring(10).trim();
+        if (!messageText) {
+            return ctx.reply('⚠️ Использование: <code>/broadcast ВАШ_ТЕКСТ</code>\nПример: /broadcast Привет, у нас обновление!', { parse_mode: 'HTML' });
+        }
+
+        const waitMsg = await ctx.reply('⏳ Отправляю рассылку всем пользователям... Пожалуйста, не спамьте эту команду.');
+
+        try {
+            const usersQuery = await getDocs(collection(db, 'users'));
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const uDoc of usersQuery.docs) {
+                const tgId = uDoc.data().telegram_id;
+                if (!tgId) continue;
+                try {
+                    await bot.telegram.sendMessage(tgId, `📣 <b>Сообщение от администрации:</b>\n\n${messageText}`, { parse_mode: 'HTML' });
+                    successCount++;
+                } catch (err: any) {
+                    failCount++; // Юзер заблокировал бота
+                }
+            }
+
+            await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `✅ <b>Рассылка завершена!</b>\n\nУспешно отправлено: ${successCount}\nНе удалось (ботов/блоков): ${failCount}`, { parse_mode: 'HTML' });
+        } catch (e) {
+            console.error('Broadcast err:', e);
+            await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, '❌ Произошла ошибка во время рассылки.');
         }
     });
 
