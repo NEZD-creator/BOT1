@@ -869,15 +869,28 @@ if (bot) {
     const webhookDomain = process.env.WEBHOOK_DOMAIN;
     
     if (webhookDomain) {
-        // Запуск через Webhook (Рекомендуется для Cloud Run / 24/7 VPS)
-        await bot.telegram.deleteWebhook();
-        expressApp.use(bot.webhookCallback('/telegraf'));
-        bot.telegram.setWebhook(`${webhookDomain}/telegraf`)
-            .then(() => console.log(`🚀 Bot is running in Webhook mode: ${webhookDomain}/telegraf`));
+        try {
+            console.log(`Configuring Webhook for: ${webhookDomain}/telegraf`);
+            await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+            expressApp.use(bot.webhookCallback('/telegraf'));
+            await bot.telegram.setWebhook(`${webhookDomain}/telegraf`, { drop_pending_updates: true });
+            console.log(`🚀 Bot is running in Webhook mode!`);
+        } catch (e) {
+            console.error("Webhook Setup Error:", e);
+        }
     } else {
         // Запуск через Long Polling (Для среды разработки AI Studio)
-        bot.launch();
-        console.log('🚀 Bot is running in Long Polling mode (Development)...');
+        try {
+            await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+            bot.launch();
+            console.log('🚀 Bot is running in Long Polling mode (Development)...');
+        } catch (e: any) {
+            if (e.response && e.response.error_code === 409) {
+                console.error('⛔ СONFLICT: Another instance of the bot is already running. Please stop it or use Webhooks.');
+            } else {
+                console.error("Long Polling Error:", e);
+            }
+        }
     }
 
     expressApp.listen(3000, '0.0.0.0', () => {
