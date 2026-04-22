@@ -906,8 +906,9 @@ if (bot) {
         console.log('⛔ Local Polling is deliberately DISABLED in AI Studio to allow the bot to run correctly on Amvera without 409 conflicts.');
     }
 
-    expressApp.listen(3000, '0.0.0.0', () => {
-        console.log('🌐 HTTP Server listening on port 3000');
+    const port = process.env.PORT || 3000;
+    expressApp.listen(port, '0.0.0.0', () => {
+        console.log(`🌐 HTTP Server listening on port ${port}`);
     });
 
     process.once('SIGINT', () => { bot.stop('SIGINT') });
