@@ -10,6 +10,10 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 
 if (!token) console.error("CRITICAL ERROR: TELEGRAM_BOT_TOKEN IS MISSING!");
 
+// Для получения репортов администратор должен запустить бота! 
+// Если у бота не получается отправить сообщение по юзернейму, укажите ADMIN_ID в .env файле.
+const ADMIN_CHAT_ID = process.env.ADMIN_ID || '@vNEZDv'; 
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
@@ -38,12 +42,13 @@ if (bot) {
     };
 
     const formatCard = (d: any) => {
-        return `<b>${d.name}, ${d.age}</b>\n🏙 <i>${d.city}</i>\n━━━━━━━━━━━━━━\n📝 ${d.bio}`;
+        const premiumBadge = d.is_premium ? ' 💎 VIP' : '';
+        return `<b>${d.name}, ${d.age}</b>${premiumBadge}\n🏙 <i>${d.city}</i>\n━━━━━━━━━━━━━━\n📝 ${d.bio}`;
     };
 
     const mainMenu = Markup.keyboard([
         ['🔥 Лента', '🔍 Умный поиск'],
-        ['👤 Мой профиль']
+        ['⚙️ Общее Меню']
     ]).resize();
 
     // ----------------------------------------
@@ -263,8 +268,34 @@ if (bot) {
     });
 
     // ----------------------------------------
-    // MY PROFILE UI
+    // MAIN MENU & MY PROFILE UI
     // ----------------------------------------
+    bot.hears('⚙️ Общее Меню', async (ctx: any) => {
+        const uid = String(ctx.from.id);
+        const userDoc = await getDoc(doc(db, 'users', uid));
+        const d = userDoc.exists() ? userDoc.data() : null;
+        
+        let text = '⚙️ <b>Главное меню</b>\n\nЗдесь вы можете настроить свой профиль или приобрести VIP.';
+        let premBtnText = '💎 Купить Premium-буст';
+
+        if (d && d.is_premium) {
+            text += '\n\n💎 <b>У вас активен Premium-статус!</b>\nВаша анкета получает больше показов и находится выше в Ленте.';
+            premBtnText = '💎 Продлить Premium';
+        }
+
+        const kbd = Markup.inlineKeyboard([
+            [{ text: '👤 Моя Анкета (Редактировать)', callback_data: 'my_profile' }],
+            [{ text: premBtnText, callback_data: 'buy_premium' }]
+        ]);
+
+        await ctx.reply(text, { parse_mode: 'HTML', ...kbd });
+    });
+
+    bot.action('my_profile', async (ctx: any) => {
+        await ctx.answerCbQuery();
+        await showMyProfile(ctx, String(ctx.from.id));
+    });
+
     async function showMyProfile(ctx: any, telegramId: string) {
         if (ctx.session?.myProfileMsgId) {
             await del(ctx, ctx.session.myProfileMsgId);
@@ -280,7 +311,7 @@ if (bot) {
         const caption = `${statusIndicator}\n\n${formatCard(d)}`;
         
         const kbd = Markup.inlineKeyboard([
-            [{ text: '✏️ Редактировать профиль', callback_data: 'edit_profile' }],
+            [{ text: '✏️ Изменить профиль', callback_data: 'edit_profile' }],
             [{ text: d.active ? '👁️‍🗨️ Скрыть анкету (Пауза)' : '🚀 Включить и искать', callback_data: 'toggle_active' }]
         ]);
         
@@ -291,10 +322,9 @@ if (bot) {
         }
     }
 
-    bot.hears('👤 Мой профиль', (ctx) => showMyProfile(ctx, String(ctx.from.id)));
     bot.action('edit_profile', async (ctx: any) => { 
         await ctx.answerCbQuery();
-        await del(ctx, ctx.callbackQuery.message.message_id); 
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id); 
         ctx.scene.enter('profile-wizard'); 
     });
     bot.action('toggle_active', async (ctx: any) => {
@@ -310,7 +340,7 @@ if (bot) {
     });
 
     // ----------------------------------------
-    // DISCOVERY SYSTEM (SMART MATCHING)
+    // DISCOVERY SYSTEM (SMART MATCHING & PREMIUM)
     // ----------------------------------------
     async function showNextProfile(ctx: any, telegramId: string) {
         try {
@@ -318,7 +348,10 @@ if (bot) {
             if (!userDoc.exists()) return ctx.reply('Надо заполнить анкету!', Markup.inlineKeyboard([[{ text: '📝 Заполнить', callback_data: 'edit_profile' }]]));
             const myProfile = userDoc.data()!;
             
-            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nВключи её в «👤 Мой профиль», чтобы смотреть других.', { parse_mode: 'HTML', ...mainMenu });
+            if (myProfile.banned) {
+                return ctx.reply('⛔ <b>Ваш аккаунт заблокирован за нарушение правил.</b>', { parse_mode: 'HTML' });
+            }
+            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nЗайди в меню, чтобы включить её.', { parse_mode: 'HTML', ...mainMenu });
 
             const intQuery = query(collection(db, 'interactions'), where('from_user_id', '==', telegramId));
             const interactions = await getDocs(intQuery);
@@ -342,7 +375,7 @@ if (bot) {
 
             for (const cDoc of candidates.docs) {
                 const b = cDoc.data();
-                if (b.telegram_id === telegramId) continue;
+                if (b.telegram_id === telegramId || b.banned) continue;
                 
                 // Gender match filter
                 if (b.target_gender !== 'target_any') {
@@ -350,10 +383,7 @@ if (bot) {
                     if (theirSearchGender !== myProfile.gender) continue;
                 }
 
-                // Keyword Keyword search matching
-                if (searchQuery) {
-                    if (!b.bio || !b.bio.toLowerCase().includes(searchQuery)) continue;
-                }
+                if (searchQuery && (!b.bio || !b.bio.toLowerCase().includes(searchQuery))) continue;
                 
                 if (interactedMap.has(b.telegram_id)) {
                     seen.push({ profile: b, lastInteraction: interactedMap.get(b.telegram_id) });
@@ -362,7 +392,7 @@ if (bot) {
                 }
             }
             
-            // SMART SCORING ALGORITHM
+            // SMART SCORING ALGORITHM WITH PREMIUM BOOST & SHADOWBANS
             const calculateMatchScore = (me: any, cand: any) => {
                 let score = 0;
                 const ageDiff = Math.abs(me.age - cand.age);
@@ -378,6 +408,11 @@ if (bot) {
                     getWords(cand.bio).forEach(w => { if (myWords.has(w)) overlap++; });
                     score += (overlap * 5);
                 }
+                
+                // VIP / Premium priority boost!
+                if (cand.is_premium) score += 150; 
+                if (cand.shadowbanned) score -= 10000;
+                
                 score += Math.random() * 5;
                 return score;
             };
@@ -392,9 +427,7 @@ if (bot) {
             }
             
             if (!candidateToShow) {
-                if (searchQuery) {
-                    return ctx.reply(`<b>Нет анкет со словом:</b> <i>${searchQuery}</i> 🏜️\n\nНажми «🔥 Лента», чтобы смотреть всех!`, { parse_mode: 'HTML', ...mainMenu });
-                }
+                if (searchQuery) return ctx.reply(`<b>Нет анкет со словом:</b> <i>${searchQuery}</i> 🏜️\n\nНажми «🔥 Лента», чтобы смотреть всех!`, { parse_mode: 'HTML', ...mainMenu });
                 return ctx.reply('<b>Пока что никого больше нет!</b> 🏜️\nЗагляни чуть позже.', { parse_mode: 'HTML', ...mainMenu });
             }
             
@@ -407,7 +440,8 @@ if (bot) {
                     { text: '❤️ Лайк', callback_data: `like_${candidateToShow.telegram_id}` } 
                 ],
                 [ 
-                    { text: '🌟 Суперлайк', callback_data: `superlike_${candidateToShow.telegram_id}` } 
+                    { text: '🌟 Суперлайк', callback_data: `superlike_${candidateToShow.telegram_id}` },
+                    { text: '🚨', callback_data: `reportP_${candidateToShow.telegram_id}` }
                 ]
             ]);
             
@@ -417,22 +451,18 @@ if (bot) {
     }
 
     bot.hears('🔥 Лента', async (ctx: any) => {
-        if (ctx.session) ctx.session.currentSearchQuery = null; // Clear filter!
+        if (ctx.session) ctx.session.currentSearchQuery = null; 
         await showNextProfile(ctx, String(ctx.from.id));
     });
-    
     bot.hears('🔍 Умный поиск', async (ctx: any) => {
         ctx.scene.enter('interest-wizard');
     });
-    
     bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
 
 
     // ----------------------------------------
     // INTERACTIONS (LIKE / DISLIKE / SUPERLIKE )
     // ----------------------------------------
-    
-    // STANDARD LIKE
     bot.action(/^like_(.+)$/, async (ctx: any) => {
         const toUserId = ctx.match[1];
         const fromUserId = String(ctx.from?.id);
@@ -464,7 +494,6 @@ if (bot) {
         } catch (err) { ctx.answerCbQuery('Ошибка'); }
     });
 
-    // Helper to send superlike after successful payment or free usage
     async function sendSuperLikeLogic(ctx: any, fromUserId: string, toUserId: string) {
         await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'like', is_superlike: true, created_at: serverTimestamp() });
 
@@ -486,7 +515,6 @@ if (bot) {
         }).catch(() => {});
     }
 
-    // SUPER LIKE 
     bot.action(/^superlike_(.+)$/, async (ctx: any) => {
         const toUserId = ctx.match[1];
         const fromUserId = String(ctx.from?.id);
@@ -509,9 +537,8 @@ if (bot) {
             if (used < 2) {
                 used += 1;
                 await setDoc(userRef, { sl_used_today: used, sl_reset_time: resetTime }, { merge: true });
-                
                 await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
-                ctx.answerCbQuery(`🌟 Суперлайк доставлен! (Осталось бесплатных сегодня: ${2 - used})`, { showAlert: true });
+                ctx.answerCbQuery(`🌟 Суперлайк доставлен! (Осталось бесплатных: ${2 - used})`, { showAlert: true });
 
                 await sendSuperLikeLogic(ctx, fromUserId, toUserId);
                 await showNextProfile(ctx, fromUserId);
@@ -526,31 +553,9 @@ if (bot) {
                     prices: [{ label: '1 Суперлайк', amount: 10 }]
                 });
             }
-        } catch(e) {
-            ctx.answerCbQuery('Ошибка');
-            console.error(e);
-        }
+        } catch(e) { ctx.answerCbQuery('Ошибка'); }
     });
 
-    // Telegram Stars Payment Webhooks
-    bot.on('pre_checkout_query', async (ctx: any) => {
-        await ctx.answerPreCheckoutQuery(true).catch(console.error);
-    });
-
-    bot.on('successful_payment', async (ctx: any) => {
-        const payload = ctx.message.successful_payment.invoice_payload;
-        if (payload && payload.startsWith('SL_')) {
-            const toUserId = payload.replace('SL_', '');
-            const fromUserId = String(ctx.from?.id);
-            
-            await ctx.reply('⭐️ Оплата прошла успешно! Ваш суперлайк отправлен.', { reply_markup: mainMenu });
-            
-            await sendSuperLikeLogic(ctx, fromUserId, toUserId);
-            await showNextProfile(ctx, fromUserId);
-        }
-    });
-
-    // DISLIKE
     bot.action(/^dislike_(.+)$/, async (ctx: any) => {
         const toUserId = ctx.match[1];
         const fromUserId = String(ctx.from?.id);
@@ -562,8 +567,121 @@ if (bot) {
         } catch (err) { ctx.answerCbQuery('Ошибка'); }
     });
 
+    // ----------------------------------------
+    // PAYMENTS AND PREMIUM SYSTEM
+    // ----------------------------------------
+    bot.action('buy_premium', async (ctx: any) => {
+        await ctx.answerCbQuery();
+        await ctx.replyWithInvoice({
+            title: '💎 Premium-буст',
+            description: 'Получай в 3 раза больше просмотров анкеты! Твоя анкета будет показываться намного чаще другим пользователям.',
+            payload: `PREMIUM_PAY`,
+            provider_token: '', 
+            currency: 'XTR',
+            prices: [{ label: 'Буст анкеты', amount: 50 }]
+        });
+    });
+
+    bot.on('pre_checkout_query', async (ctx: any) => {
+        await ctx.answerPreCheckoutQuery(true).catch(console.error);
+    });
+
+    bot.on('successful_payment', async (ctx: any) => {
+        const payload = ctx.message.successful_payment.invoice_payload;
+        const fromUserId = String(ctx.from?.id);
+
+        if (payload && payload.startsWith('SL_')) {
+            const toUserId = payload.replace('SL_', '');
+            await ctx.reply('⭐️ Оплата прошла успешно! Ваш суперлайк отправлен.', { reply_markup: mainMenu });
+            await sendSuperLikeLogic(ctx, fromUserId, toUserId);
+            await showNextProfile(ctx, fromUserId);
+        } else if (payload === 'PREMIUM_PAY') {
+            await setDoc(doc(db, 'users', fromUserId), { is_premium: true }, { merge: true });
+            await ctx.reply('💎 <b>Premium-буст активирован!</b>\nТеперь вашу анкету увидит гораздо больше людей.', { parse_mode: 'HTML', reply_markup: mainMenu });
+        }
+    });
+
+    // ----------------------------------------
+    // REPORTING SYSTEM (COMPLAINTS)
+    // ----------------------------------------
+    bot.action(/^reportP_(.+)$/, async (ctx: any) => {
+        const targetId = ctx.match[1];
+        await ctx.answerCbQuery();
+        
+        const kbd = Markup.inlineKeyboard([
+            [Markup.button.callback('1. 🔞 Матер. для взрослых', `repR_1_${targetId}`)],
+            [Markup.button.callback('2. 💰 Продажа услуг', `repR_2_${targetId}`)],
+            [Markup.button.callback('3. 💩 Спам/Мошенничество', `repR_3_${targetId}`)],
+            [Markup.button.callback('4. 🦨 Другое', `repR_4_${targetId}`)],
+            [Markup.button.callback('🔙 Вернуться назад', `repCancel_${targetId}`)]
+        ]);
+        
+        // Перезаписываем кнопки на карточке
+        await ctx.editMessageReplyMarkup(kbd.reply_markup).catch(()=>{});
+    });
+
+    bot.action(/^repCancel_(.+)$/, async (ctx: any) => {
+        const candidateId = ctx.match[1];
+        await ctx.answerCbQuery();
+        
+        const kbd = Markup.inlineKeyboard([
+            [ { text: '❌ Дальше', callback_data: `dislike_${candidateId}` }, { text: '❤️ Лайк', callback_data: `like_${candidateId}` } ],
+            [ { text: '🌟 Суперлайк', callback_data: `superlike_${candidateId}` }, { text: '🚨', callback_data: `reportP_${candidateId}` } ]
+        ]);
+        await ctx.editMessageReplyMarkup(kbd.reply_markup).catch(()=>{});
+    });
+
+    bot.action(/^repR_([1-4])_(.+)$/, async (ctx: any) => {
+        const reasonId = ctx.match[1];
+        const targetId = ctx.match[2];
+        const fromId = String(ctx.from?.id);
+        
+        const reasons: any = { '1': '🔞 Материал для взрослых', '2': '💰 Продажа товаров и услуг', '3': '💩 Спам/Мошенничество', '4': '🦨 Другое' };
+        
+        await ctx.answerCbQuery('Жалоба отправлена модераторам. Спасибо!', { showAlert: true });
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
+        
+        try {
+            const reporterDoc = await getDoc(doc(db, 'users', fromId));
+            const targetDoc = await getDoc(doc(db, 'users', targetId));
+            if(reporterDoc.exists() && targetDoc.exists()) {
+                const repMsg = `🚨 <b>НОВАЯ ЖАЛОБА</b> 🚨\n\n<b>Жалоба на:</b> ${targetDoc.data().name} (ID: <code>${targetId}</code>)\n<b>Причина:</b> ${reasons[reasonId]}\n<b>От кого:</b> ${reporterDoc.data().name} (ID: <code>${fromId}</code>)\n\n<b>Анкета нарушителя:</b>\n${targetDoc.data().bio}`;
+                
+                const adminKbd = Markup.inlineKeyboard([
+                    [Markup.button.callback('⛔ ЗАБЛОКИРОВАТЬ', `admBan_${targetId}`)],
+                    [Markup.button.callback('👻 Теневой бан (Снизить рейтинг)', `admShadow_${targetId}`)],
+                    [Markup.button.callback('✅ Отклонить', `admOk_0`)]
+                ]);
+                
+                try {
+                    await bot.telegram.sendMessage(ADMIN_CHAT_ID, repMsg, { parse_mode: 'HTML', ...adminKbd });
+                } catch(e) { console.error("Failed to prompt admin:", e); }
+            }
+        } catch(e) { console.error('Error reporting logic', e); }
+
+        await showNextProfile(ctx, fromId);
+    });
+
+    // ADMIN ACTIONS
+    bot.action(/^admBan_(.+)$/, async (ctx: any) => {
+        const targetId = ctx.match[1];
+        await setDoc(doc(db, 'users', targetId), { active: false, banned: true }, { merge: true });
+        await ctx.answerCbQuery('Пользователь заблокирован навсегда!');
+        await ctx.editMessageText('✅ Модерация:\n⛔ ПОЛЬЗОВАТЕЛЬ ЗАБЛОКИРОВАН').catch(()=>{});
+    });
+    bot.action(/^admShadow_(.+)$/, async (ctx: any) => {
+        const targetId = ctx.match[1];
+        await setDoc(doc(db, 'users', targetId), { shadowbanned: true }, { merge: true });
+        await ctx.answerCbQuery('Теневой бан активирован!');
+        await ctx.editMessageText('✅ Модерация:\n👻 ВЫДАН ТЕНЕВОЙ БАН').catch(()=>{});
+    });
+    bot.action('admOk_0', async (ctx: any) => {
+        await ctx.answerCbQuery('Отклонено');
+        await ctx.editMessageText('✅ Модерация:\nЖАЛОБА ОТКЛОНЕНА').catch(()=>{});
+    });
+
     bot.launch();
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
-    console.log('Bot is running heavily optimized with beautiful UI and Telegram Stars monetization...');
+    console.log('Bot is running heavily optimized with Premium Subscriptions and Admin Reporting...');
 }
