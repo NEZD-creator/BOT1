@@ -38,13 +38,17 @@ if (bot) {
     };
 
     const formatCard = (d: any) => {
-        return `<b>${d.name}, ${d.age}</b> 📍 <i>${d.city}</i>\n\n💬 ${d.bio}`;
+        return `<b>${d.name}, ${d.age}</b>\n🏙 <i>${d.city}</i>\n━━━━━━━━━━━━━━\n📝 ${d.bio}`;
     };
 
     const mainMenu = Markup.keyboard([
-        ['🚀 Знакомства', '👤 Мой профиль']
+        ['🔥 Лента', '🔍 Умный поиск'],
+        ['👤 Мой профиль']
     ]).resize();
 
+    // ----------------------------------------
+    // WIZARD: PROFILE CREATION
+    // ----------------------------------------
     const profileWizard = new WizardScene(
       'profile-wizard',
       async (ctx: any) => {
@@ -59,7 +63,7 @@ if (bot) {
         ];
         if (old?.gender) kbd.push([Markup.button.callback('✨ Оставить как есть', 'skip')]);
         
-        const msg = await ctx.reply('<b>Шаг 1/7</b>\nДобро пожаловать! Давайте создадим твою анкету.\n\nУкажи свой пол:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbd) });
+        const msg = await ctx.reply('<b>Шаг 1/7</b>\nДобро пожаловать в создание анкеты.\n\nУкажи свой пол:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbd) });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -94,7 +98,7 @@ if (bot) {
         const oldName = ctx.wizard.state.old?.name;
         const kbd = oldName ? Markup.inlineKeyboard([[{ text: `✨ Оставить: ${oldName.substring(0,15)}`, callback_data: 'skip' }]]) : undefined;
         
-        const msg = await ctx.reply('<b>Шаг 3/7</b>\nКак к тебе обращаться? (Твое имя или ник) ✍️', { parse_mode: 'HTML', ...kbd });
+        const msg = await ctx.reply('<b>Шаг 3/7</b>\nТвое имя (или ник)? ✍️', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -110,7 +114,7 @@ if (bot) {
         const oldAge = ctx.wizard.state.old?.age;
         const kbd = oldAge ? Markup.inlineKeyboard([[{ text: `✨ Оставить: ${oldAge}`, callback_data: 'skip' }]]) : undefined;
         
-        const msg = await ctx.reply('<b>Шаг 4/7</b>\nСколько тебе лет? (Напиши число) 🎂', { parse_mode: 'HTML', ...kbd });
+        const msg = await ctx.reply('<b>Шаг 4/7</b>\nСколько тебе лет? (цифрами) 🎂', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -120,7 +124,7 @@ if (bot) {
         } else if (ctx.message?.text) {
             const age = parseInt(ctx.message.text);
             if (isNaN(age) || age < 14 || age > 99) {
-                const m = await ctx.reply('Пожалуйста, введи корректный возраст цифрами (от 14 до 99).', Markup.removeKeyboard());
+                const m = await ctx.reply('Пожалуйста, введи корректный возраст от 14 до 99.', Markup.removeKeyboard());
                 await del(ctx, ctx.message.message_id); ctx.wizard.state.l = m.message_id;
                 return;
             }
@@ -146,7 +150,7 @@ if (bot) {
         
         await del(ctx, ctx.wizard.state.l);
         const kbd = ctx.wizard.state.old?.bio ? Markup.inlineKeyboard([[{ text: '✨ Оставить текущее описание', callback_data: 'skip' }]]) : undefined;
-        const msg = await ctx.reply('<b>Шаг 6/7</b>\nРасскажи о себе и своих интересах 🎵🎮\n<i>(Бот поможет найти людей с похожими увлечениями!)</i>', { parse_mode: 'HTML', ...kbd });
+        const msg = await ctx.reply('<b>Шаг 6/7</b>\nРасскажи о себе и своих увлечениях 🎵🎮\n<i>(Алгоритм использует этот текст, чтобы находить людей с общими интересами)</i>', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -160,9 +164,9 @@ if (bot) {
         
         await del(ctx, ctx.wizard.state.l);
         const kbd = (ctx.wizard.state.old?.media_id || ctx.wizard.state.old?.photo_url) 
-            ? Markup.inlineKeyboard([[{ text: '✨ Оставить текущее медиа', callback_data: 'skip' }]]) : undefined;
+            ? Markup.inlineKeyboard([[{ text: '✨ Оставить текущее фото/видео', callback_data: 'skip' }]]) : undefined;
             
-        const msg = await ctx.reply('<b>Финальный шаг 7/7!</b> 📸\nПришли свое фото или круговое видео (до 15 сек). Красивое медиа — залог успеха!', { parse_mode: 'HTML', ...kbd });
+        const msg = await ctx.reply('<b>Финальный шаг 7/7!</b> 📸\nПрикрепи свое классное фото или видео-кружок (до 15 сек).', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -176,7 +180,7 @@ if (bot) {
             await del(ctx, ctx.message.message_id);
         } else if (ctx.message?.video) {
             if (ctx.message.video.duration > 15) {
-                const m = await ctx.reply('Видео слишком длинное! Отрежь до 15 секунд или запиши кружок.');
+                const m = await ctx.reply('Видео слишком длинное! Нужно до 15 сек.');
                 await del(ctx, ctx.message.message_id);
                 return;
             }
@@ -209,14 +213,39 @@ if (bot) {
         
         try {
             await setDoc(doc(db, 'users', telegramId), profileData, { merge: true });
-            await ctx.reply('🎉 <b>Анкета успешно создана!</b>', { parse_mode: 'HTML', ...mainMenu });
+            await ctx.reply('🎉 <b>Анкета успешно сохранена!</b>', { parse_mode: 'HTML', ...mainMenu });
             await showMyProfile(ctx, telegramId);
-        } catch (err: any) { await ctx.reply(`Ошибка: ${err.message}`); }
+        } catch (err: any) { await ctx.reply(`Ошибка БД: ${err.message}`); }
         return ctx.scene.leave();
       }
     );
 
-    const stage = new Stage([profileWizard]);
+    // ----------------------------------------
+    // WIZARD: SMART SEARCH
+    // ----------------------------------------
+    const interestWizard = new WizardScene(
+        'interest-wizard',
+        async (ctx: any) => {
+            const msg = await ctx.reply("🔍 <b>Умный поиск по интересу</b>\n\nНапиши ключевое слово (например: <i>аниме, спорт, it, музыка, авто</i>). Бот найдет все анкеты, где в описании есть это слово!", 
+                { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } }
+            );
+            ctx.wizard.state.l = msg.message_id;
+            return ctx.wizard.next();
+        },
+        async (ctx: any) => {
+            if (ctx.message?.text) {
+                const querytext = ctx.message.text.substring(0, 30);
+                if (!ctx.session) ctx.session = {};
+                ctx.session.currentSearchQuery = querytext;
+                
+                await ctx.reply(`🎯 Ищем анкеты со словом: <b>${querytext}</b>...\n<i>(Для сброса фильтра нажми "🔥 Лента" в меню)</i>`, { parse_mode: 'HTML', ...mainMenu });
+                await showNextProfile(ctx, String(ctx.from.id));
+            }
+            return ctx.scene.leave();
+        }
+    );
+
+    const stage = new Stage([profileWizard, interestWizard]);
     bot.catch((err) => console.error("Bot Error", err));
     bot.use(session());
     bot.use(stage.middleware() as any);
@@ -225,15 +254,17 @@ if (bot) {
         const uid = String(ctx.from?.id);
         const userDoc = await getDoc(doc(db, 'users', uid));
         if (userDoc.exists()) {
-            await ctx.reply('<b>С возвращением!</b> Рады видеть тебя снова. Жми «🚀 Знакомства», чтобы начать поиск! 💘', { parse_mode: 'HTML', ...mainMenu });
+            await ctx.reply('<b>С возвращением!</b> Нажимай «🔥 Лента», чтобы продолжить поиск! 💘', { parse_mode: 'HTML', ...mainMenu });
         } else {
-            await ctx.reply('<b>Привет! Я твой бот для знакомств.</b> 💘\nЗдесь ты можешь найти вторую половинку, друзей или просто крутое общение.\n\nЖми кнопку ниже, чтобы начать!', 
-                { parse_mode: 'HTML', ...Markup.inlineKeyboard([[{ text: '📝 Начать регистрацию', callback_data: 'edit_profile' }]]) }
+            await ctx.reply('<b>Привет! Бот-Дейтинг на связи.</b> 💘\nТут можно найти классную компанию, вторую половину или новых друзей.\n\nЖми кнопку ниже, чтобы заполнить анкету!', 
+                { parse_mode: 'HTML', ...Markup.inlineKeyboard([[{ text: '📝 Создать профиль', callback_data: 'edit_profile' }]]) }
             );
         }
     });
 
-    // MY PROFILE SYSTEM
+    // ----------------------------------------
+    // MY PROFILE UI
+    // ----------------------------------------
     async function showMyProfile(ctx: any, telegramId: string) {
         if (ctx.session?.myProfileMsgId) {
             await del(ctx, ctx.session.myProfileMsgId);
@@ -245,15 +276,19 @@ if (bot) {
         
         if (!d.media_id && d.photo_url) { d.media_id = d.photo_url; d.media_type = 'photo'; }
         
-        const statusIndicator = d.active ? '🟢 <b>АКТИВНА</b> (в поиске)' : '🔴 <b>СКРЫТА</b> (пауза)';
+        const statusIndicator = d.active ? '<b>СТАТУС: АКТИВНА</b> (показывается в поиске)' : '<b>СТАТУС: СКРЫТА</b> (тебя никто не видит)';
         const caption = `${statusIndicator}\n\n${formatCard(d)}`;
         
         const kbd = Markup.inlineKeyboard([
-            [{ text: '✏️ Редактировать анкету', callback_data: 'edit_profile' }],
-            [{ text: d.active ? '👁️‍🗨️ Скрыть анкету (Пауза)' : '🚀 Включить анкету (Искать)', callback_data: 'toggle_active' }]
+            [{ text: '✏️ Редактировать профиль', callback_data: 'edit_profile' }],
+            [{ text: d.active ? '👁️‍🗨️ Скрыть анкету (Пауза)' : '🚀 Включить и искать', callback_data: 'toggle_active' }]
         ]);
         
-        await sendMedia(ctx, d, caption, kbd.reply_markup);
+        const sentMsg = await sendMedia(ctx, d, caption, kbd.reply_markup);
+        if (sentMsg) {
+            if (!ctx.session) ctx.session = {};
+            ctx.session.myProfileMsgId = sentMsg.message_id;
+        }
     }
 
     bot.hears('👤 Мой профиль', (ctx) => showMyProfile(ctx, String(ctx.from.id)));
@@ -274,14 +309,16 @@ if (bot) {
         }
     });
 
-    // DISCOVERY SYSTEM
+    // ----------------------------------------
+    // DISCOVERY SYSTEM (SMART MATCHING)
+    // ----------------------------------------
     async function showNextProfile(ctx: any, telegramId: string) {
         try {
             const userDoc = await getDoc(doc(db, 'users', telegramId));
-            if (!userDoc.exists()) return ctx.reply('Сначала заполни анкету!', Markup.inlineKeyboard([[{ text: '📝 Заполнить', callback_data: 'edit_profile' }]]));
+            if (!userDoc.exists()) return ctx.reply('Надо заполнить анкету!', Markup.inlineKeyboard([[{ text: '📝 Заполнить', callback_data: 'edit_profile' }]]));
             const myProfile = userDoc.data()!;
             
-            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nЗайди в «👤 Мой профиль», чтобы включить её и смотреть других.', { parse_mode: 'HTML', ...mainMenu });
+            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nВключи её в «👤 Мой профиль», чтобы смотреть других.', { parse_mode: 'HTML', ...mainMenu });
 
             const intQuery = query(collection(db, 'interactions'), where('from_user_id', '==', telegramId));
             const interactions = await getDocs(intQuery);
@@ -301,13 +338,21 @@ if (bot) {
             let unseen: any[] = [];
             let seen: { profile: any, lastInteraction: number }[] = [];
 
+            const searchQuery = ctx.session?.currentSearchQuery ? ctx.session.currentSearchQuery.toLowerCase() : null;
+
             for (const cDoc of candidates.docs) {
                 const b = cDoc.data();
                 if (b.telegram_id === telegramId) continue;
                 
+                // Gender match filter
                 if (b.target_gender !== 'target_any') {
                     const theirSearchGender = b.target_gender === 'target_m' ? 'gender_m' : 'gender_f';
                     if (theirSearchGender !== myProfile.gender) continue;
+                }
+
+                // Keyword Keyword search matching
+                if (searchQuery) {
+                    if (!b.bio || !b.bio.toLowerCase().includes(searchQuery)) continue;
                 }
                 
                 if (interactedMap.has(b.telegram_id)) {
@@ -317,6 +362,7 @@ if (bot) {
                 }
             }
             
+            // SMART SCORING ALGORITHM
             const calculateMatchScore = (me: any, cand: any) => {
                 let score = 0;
                 const ageDiff = Math.abs(me.age - cand.age);
@@ -346,15 +392,22 @@ if (bot) {
             }
             
             if (!candidateToShow) {
-                return ctx.reply('<b>Пока что никого нет в этой категории!</b> 🏜️\nЗагляни чуть позже.', { parse_mode: 'HTML', ...mainMenu });
+                if (searchQuery) {
+                    return ctx.reply(`<b>Нет анкет со словом:</b> <i>${searchQuery}</i> 🏜️\n\nНажми «🔥 Лента», чтобы смотреть всех!`, { parse_mode: 'HTML', ...mainMenu });
+                }
+                return ctx.reply('<b>Пока что никого больше нет!</b> 🏜️\nЗагляни чуть позже.', { parse_mode: 'HTML', ...mainMenu });
             }
             
-            const caption = formatCard(candidateToShow);
+            const header = searchQuery ? `🎯 ✨ <b>Фильтр:</b> <i>«${searchQuery}»</i>\n\n` : '';
+            const caption = header + formatCard(candidateToShow);
+            
             const kbd = Markup.inlineKeyboard([
-                [
-                    { text: '👎', callback_data: `dislike_${candidateToShow.telegram_id}` },
-                    { text: '💤', callback_data: `sleep` },
-                    { text: '💖', callback_data: `like_${candidateToShow.telegram_id}` }
+                [ 
+                    { text: '❌ Дальше', callback_data: `dislike_${candidateToShow.telegram_id}` },
+                    { text: '❤️ Лайк', callback_data: `like_${candidateToShow.telegram_id}` } 
+                ],
+                [ 
+                    { text: '🌟 Суперлайк', callback_data: `superlike_${candidateToShow.telegram_id}` } 
                 ]
             ]);
             
@@ -363,24 +416,28 @@ if (bot) {
         } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', mainMenu); }
     }
 
-    bot.hears('🚀 Знакомства', async (ctx: any) => {
+    bot.hears('🔥 Лента', async (ctx: any) => {
+        if (ctx.session) ctx.session.currentSearchQuery = null; // Clear filter!
         await showNextProfile(ctx, String(ctx.from.id));
     });
+    
+    bot.hears('🔍 Умный поиск', async (ctx: any) => {
+        ctx.scene.enter('interest-wizard');
+    });
+    
     bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
 
-    bot.action('sleep', async (ctx: any) => {
-        await ctx.answerCbQuery('Перерыв ☕');
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
-        await ctx.reply('<i>Поиск приостановлен. Нажми «🚀 Знакомства» в меню, чтобы продолжить.</i>', { parse_mode: 'HTML' });
-    });
 
-    // INTERACTIONS
+    // ----------------------------------------
+    // INTERACTIONS (LIKE / DISLIKE / SUPERLIKE )
+    // ----------------------------------------
+    
+    // STANDARD LIKE
     bot.action(/^like_(.+)$/, async (ctx: any) => {
         const toUserId = ctx.match[1];
         const fromUserId = String(ctx.from?.id);
         try {
             await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'like', created_at: serverTimestamp() });
-            
             await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
             
             const matchDoc = await getDoc(doc(db, 'interactions', `${toUserId}_${fromUserId}`));
@@ -396,11 +453,10 @@ if (bot) {
                 await sendMedia(ctx, otherD, `🎉 <b>Взаимная симпатия!</b> 🎉\n\nВы с <b>${otherD.name}</b> понравились друг другу.\nНе теряй время, жми кнопку и пиши! 🔥`, matchKbdYou.reply_markup);
                 
                 const matchKbdThem = Markup.inlineKeyboard([[{ text: `✈️ Написать ${myD.name}`, url: myUrl }]]);
-                
                 const sendMethod = myD.media_type === 'video' ? bot.telegram.sendVideo.bind(bot.telegram) : (myD.media_type === 'animation' ? bot.telegram.sendAnimation.bind(bot.telegram) : bot.telegram.sendPhoto.bind(bot.telegram));
                 const mediaId = myD.media_id || myD.photo_url;
                 
-                await sendMethod(toUserId, mediaId, { caption: `🎉 <b>Взаимная симпатия!</b> 🎉\n\nТы понравился(ась) <b>${myD.name}</b>.\nСкорее пиши первым(ой)! 🔥`, reply_markup: matchKbdThem.reply_markup as any, parse_mode: 'HTML' });
+                await sendMethod(toUserId, mediaId, { caption: `🎉 <b>Взаимная симпатия!</b> 🎉\n\nТы понравился(ась) <b>${myD.name}</b>.\nСкорее пиши первым(ой)! 🔥`, reply_markup: matchKbdThem.reply_markup as any, parse_mode: 'HTML' }).catch(()=>{});
             } else {
                 ctx.answerCbQuery('Лайк отправлен 💖');
             }
@@ -408,6 +464,93 @@ if (bot) {
         } catch (err) { ctx.answerCbQuery('Ошибка'); }
     });
 
+    // Helper to send superlike after successful payment or free usage
+    async function sendSuperLikeLogic(ctx: any, fromUserId: string, toUserId: string) {
+        await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'like', is_superlike: true, created_at: serverTimestamp() });
+
+        const myDDoc = await getDoc(doc(db, 'users', fromUserId));
+        if(!myDDoc.exists()) return;
+        const myD = myDDoc.data()!;
+        
+        const sendMethod = myD.media_type === 'video' ? bot.telegram.sendVideo.bind(bot.telegram) : (myD.media_type === 'animation' ? bot.telegram.sendAnimation.bind(bot.telegram) : bot.telegram.sendPhoto.bind(bot.telegram));
+        const mediaId = myD.media_id || myD.photo_url;
+        
+        const sl_kbd = Markup.inlineKeyboard([
+            [ { text: '❌ Дальше', callback_data: `dislike_${fromUserId}` }, { text: '❤️ Ответить', callback_data: `like_${fromUserId}` } ]
+        ]);
+        
+        await sendMethod(toUserId, mediaId, { 
+            caption: `🌟 <b>ТЕБЕ ОТПРАВИЛИ СУПЕРЛАЙК!</b> 🌟\nКто-то очень хочет пообщаться!\n\n${formatCard(myD)}`, 
+            reply_markup: sl_kbd.reply_markup as any, 
+            parse_mode: 'HTML' 
+        }).catch(() => {});
+    }
+
+    // SUPER LIKE 
+    bot.action(/^superlike_(.+)$/, async (ctx: any) => {
+        const toUserId = ctx.match[1];
+        const fromUserId = String(ctx.from?.id);
+        
+        try {
+            const userRef = doc(db, 'users', fromUserId);
+            const snap = await getDoc(userRef);
+            if (!snap.exists()) return;
+            const d = snap.data();
+            
+            const now = Date.now();
+            let used = d.sl_used_today || 0;
+            let resetTime = d.sl_reset_time || 0;
+            
+            if (now > resetTime) {
+                used = 0;
+                resetTime = now + 24 * 60 * 60 * 1000;
+            }
+            
+            if (used < 2) {
+                used += 1;
+                await setDoc(userRef, { sl_used_today: used, sl_reset_time: resetTime }, { merge: true });
+                
+                await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
+                ctx.answerCbQuery(`🌟 Суперлайк доставлен! (Осталось бесплатных сегодня: ${2 - used})`, { showAlert: true });
+
+                await sendSuperLikeLogic(ctx, fromUserId, toUserId);
+                await showNextProfile(ctx, fromUserId);
+            } else {
+                ctx.answerCbQuery('Бесплатные закончились. Купите за звезды!');
+                await ctx.replyWithInvoice({
+                    title: 'Суперлайк 🌟',
+                    description: 'Твои 2 бесплатных суперлайка на сегодня закончились. Отправь суперлайк прямо сейчас за Telegram Звезды!',
+                    payload: `SL_${toUserId}`,
+                    provider_token: '', 
+                    currency: 'XTR',
+                    prices: [{ label: '1 Суперлайк', amount: 10 }]
+                });
+            }
+        } catch(e) {
+            ctx.answerCbQuery('Ошибка');
+            console.error(e);
+        }
+    });
+
+    // Telegram Stars Payment Webhooks
+    bot.on('pre_checkout_query', async (ctx: any) => {
+        await ctx.answerPreCheckoutQuery(true).catch(console.error);
+    });
+
+    bot.on('successful_payment', async (ctx: any) => {
+        const payload = ctx.message.successful_payment.invoice_payload;
+        if (payload && payload.startsWith('SL_')) {
+            const toUserId = payload.replace('SL_', '');
+            const fromUserId = String(ctx.from?.id);
+            
+            await ctx.reply('⭐️ Оплата прошла успешно! Ваш суперлайк отправлен.', { reply_markup: mainMenu });
+            
+            await sendSuperLikeLogic(ctx, fromUserId, toUserId);
+            await showNextProfile(ctx, fromUserId);
+        }
+    });
+
+    // DISLIKE
     bot.action(/^dislike_(.+)$/, async (ctx: any) => {
         const toUserId = ctx.match[1];
         const fromUserId = String(ctx.from?.id);
@@ -422,5 +565,5 @@ if (bot) {
     bot.launch();
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
-    console.log('Bot is running heavily optimized with beautiful UI...');
+    console.log('Bot is running heavily optimized with beautiful UI and Telegram Stars monetization...');
 }
