@@ -37,8 +37,12 @@ if (bot) {
         return ctx.replyWithPhoto(id, opts);
     };
 
+    const formatCard = (d: any) => {
+        return `<b>${d.name}, ${d.age}</b> 📍 <i>${d.city}</i>\n\n💬 ${d.bio}`;
+    };
+
     const mainMenu = Markup.keyboard([
-        ['🔥 Смотреть анкеты', '👤 Моя анкета']
+        ['🚀 Знакомства', '👤 Мой профиль']
     ]).resize();
 
     const profileWizard = new WizardScene(
@@ -51,11 +55,11 @@ if (bot) {
         ctx.wizard.state.old = old;
         
         const kbd = [
-            [Markup.button.callback('🙎‍♂️ Парень', 'gender_m'), Markup.button.callback('🙎‍♀️ Девушка', 'gender_f')]
+            [Markup.button.callback('🙎‍♂️ Я парень', 'gender_m'), Markup.button.callback('🙎‍♀️ Я девушка', 'gender_f')]
         ];
-        if (old?.gender) kbd.push([Markup.button.callback('⏩ Оставить текущий пол', 'skip')]);
+        if (old?.gender) kbd.push([Markup.button.callback('✨ Оставить как есть', 'skip')]);
         
-        const msg = await ctx.reply('Кто ты?', Markup.inlineKeyboard(kbd));
+        const msg = await ctx.reply('<b>Шаг 1/7</b>\nДобро пожаловать! Давайте создадим твою анкету.\n\nУкажи свой пол:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbd) });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -69,12 +73,12 @@ if (bot) {
         await del(ctx, ctx.callbackQuery?.message?.message_id);
         
         const kbd = [
-            [Markup.button.callback('🙎‍♂️ Парни', 'target_m'), Markup.button.callback('🙎‍♀️ Девушки', 'target_f')],
-            [Markup.button.callback('👫 Все', 'target_any')]
+            [Markup.button.callback('🙎‍♂️ Парней', 'target_m'), Markup.button.callback('🙎‍♀️ Девушек', 'target_f')],
+            [Markup.button.callback('👫 Мне не важен пол', 'target_any')]
         ];
-        if (ctx.wizard.state.old?.target_gender) kbd.push([Markup.button.callback('⏩ Оставить текущее', 'skip')]);
+        if (ctx.wizard.state.old?.target_gender) kbd.push([Markup.button.callback('✨ Оставить как есть', 'skip')]);
         
-        const msg = await ctx.reply('Кто тебя интересует?', Markup.inlineKeyboard(kbd));
+        const msg = await ctx.reply('<b>Шаг 2/7</b>\nКого будем искать? 👀', { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbd) });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -88,9 +92,9 @@ if (bot) {
         await del(ctx, ctx.callbackQuery?.message?.message_id);
         
         const oldName = ctx.wizard.state.old?.name;
-        const kbd = oldName ? Markup.inlineKeyboard([[{ text: `⏩ Оставить: ${oldName.substring(0,15)}`, callback_data: 'skip' }]]) : undefined;
+        const kbd = oldName ? Markup.inlineKeyboard([[{ text: `✨ Оставить: ${oldName.substring(0,15)}`, callback_data: 'skip' }]]) : undefined;
         
-        const msg = await ctx.reply('Твое имя (или ник)?', kbd);
+        const msg = await ctx.reply('<b>Шаг 3/7</b>\nКак к тебе обращаться? (Твое имя или ник) ✍️', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -104,9 +108,9 @@ if (bot) {
         
         await del(ctx, ctx.wizard.state.l);
         const oldAge = ctx.wizard.state.old?.age;
-        const kbd = oldAge ? Markup.inlineKeyboard([[{ text: `⏩ Оставить: ${oldAge}`, callback_data: 'skip' }]]) : undefined;
+        const kbd = oldAge ? Markup.inlineKeyboard([[{ text: `✨ Оставить: ${oldAge}`, callback_data: 'skip' }]]) : undefined;
         
-        const msg = await ctx.reply('Сколько лет? (цифрой)', kbd);
+        const msg = await ctx.reply('<b>Шаг 4/7</b>\nСколько тебе лет? (Напиши число) 🎂', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -116,7 +120,7 @@ if (bot) {
         } else if (ctx.message?.text) {
             const age = parseInt(ctx.message.text);
             if (isNaN(age) || age < 14 || age > 99) {
-                const m = await ctx.reply('Введи реальный возраст.', Markup.removeKeyboard());
+                const m = await ctx.reply('Пожалуйста, введи корректный возраст цифрами (от 14 до 99).', Markup.removeKeyboard());
                 await del(ctx, ctx.message.message_id); ctx.wizard.state.l = m.message_id;
                 return;
             }
@@ -126,9 +130,9 @@ if (bot) {
         
         await del(ctx, ctx.wizard.state.l);
         const oldCity = ctx.wizard.state.old?.city;
-        const kbd = oldCity ? Markup.inlineKeyboard([[{ text: `⏩ Оставить: ${oldCity.substring(0,15)}`, callback_data: 'skip' }]]) : undefined;
+        const kbd = oldCity ? Markup.inlineKeyboard([[{ text: `✨ Оставить: ${oldCity.substring(0,15)}`, callback_data: 'skip' }]]) : undefined;
         
-        const msg = await ctx.reply('Твой город?', kbd);
+        const msg = await ctx.reply('<b>Шаг 5/7</b>\nИз какого ты города? 🌆', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -141,8 +145,8 @@ if (bot) {
         } else return;
         
         await del(ctx, ctx.wizard.state.l);
-        const kbd = ctx.wizard.state.old?.bio ? Markup.inlineKeyboard([[{ text: '⏩ Оставить текущее описание', callback_data: 'skip' }]]) : undefined;
-        const msg = await ctx.reply('Расскажи о себе:', kbd);
+        const kbd = ctx.wizard.state.old?.bio ? Markup.inlineKeyboard([[{ text: '✨ Оставить текущее описание', callback_data: 'skip' }]]) : undefined;
+        const msg = await ctx.reply('<b>Шаг 6/7</b>\nРасскажи о себе и своих интересах 🎵🎮\n<i>(Бот поможет найти людей с похожими увлечениями!)</i>', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -156,9 +160,9 @@ if (bot) {
         
         await del(ctx, ctx.wizard.state.l);
         const kbd = (ctx.wizard.state.old?.media_id || ctx.wizard.state.old?.photo_url) 
-            ? Markup.inlineKeyboard([[{ text: '⏩ Оставить текущее фото/видео', callback_data: 'skip' }]]) : undefined;
+            ? Markup.inlineKeyboard([[{ text: '✨ Оставить текущее медиа', callback_data: 'skip' }]]) : undefined;
             
-        const msg = await ctx.reply('Пришли свое фото или видео (кружочек или обычное, до 15 сек)! 📸', kbd);
+        const msg = await ctx.reply('<b>Финальный шаг 7/7!</b> 📸\nПришли свое фото или круговое видео (до 15 сек). Красивое медиа — залог успеха!', { parse_mode: 'HTML', ...kbd });
         ctx.wizard.state.l = msg.message_id;
         return ctx.wizard.next();
       },
@@ -172,7 +176,7 @@ if (bot) {
             await del(ctx, ctx.message.message_id);
         } else if (ctx.message?.video) {
             if (ctx.message.video.duration > 15) {
-                const m = await ctx.reply('Видео слишком длинное! Максимум 15 секунд.');
+                const m = await ctx.reply('Видео слишком длинное! Отрежь до 15 секунд или запиши кружок.');
                 await del(ctx, ctx.message.message_id);
                 return;
             }
@@ -205,7 +209,7 @@ if (bot) {
         
         try {
             await setDoc(doc(db, 'users', telegramId), profileData, { merge: true });
-            await ctx.reply('✅ Твоя анкета сохранена и готова!', mainMenu);
+            await ctx.reply('🎉 <b>Анкета успешно создана!</b>', { parse_mode: 'HTML', ...mainMenu });
             await showMyProfile(ctx, telegramId);
         } catch (err: any) { await ctx.reply(`Ошибка: ${err.message}`); }
         return ctx.scene.leave();
@@ -217,7 +221,17 @@ if (bot) {
     bot.use(session());
     bot.use(stage.middleware() as any);
 
-    bot.start((ctx) => ctx.reply('Привет! Разреши мне найти тебе пару. 💘', Markup.inlineKeyboard([[{ text: '📝 Заполнить анкету', callback_data: 'edit_profile' }]])));
+    bot.start(async (ctx: any) => {
+        const uid = String(ctx.from?.id);
+        const userDoc = await getDoc(doc(db, 'users', uid));
+        if (userDoc.exists()) {
+            await ctx.reply('<b>С возвращением!</b> Рады видеть тебя снова. Жми «🚀 Знакомства», чтобы начать поиск! 💘', { parse_mode: 'HTML', ...mainMenu });
+        } else {
+            await ctx.reply('<b>Привет! Я твой бот для знакомств.</b> 💘\nЗдесь ты можешь найти вторую половинку, друзей или просто крутое общение.\n\nЖми кнопку ниже, чтобы начать!', 
+                { parse_mode: 'HTML', ...Markup.inlineKeyboard([[{ text: '📝 Начать регистрацию', callback_data: 'edit_profile' }]]) }
+            );
+        }
+    });
 
     // MY PROFILE SYSTEM
     async function showMyProfile(ctx: any, telegramId: string) {
@@ -226,30 +240,25 @@ if (bot) {
         }
         
         const userDoc = await getDoc(doc(db, 'users', telegramId));
-        if (!userDoc.exists()) return ctx.reply('У тебя еще нет профиля!', Markup.inlineKeyboard([[{ text: '📝 Создать', callback_data: 'edit_profile' }]]));
+        if (!userDoc.exists()) return ctx.reply('У тебя еще нет профиля!', Markup.inlineKeyboard([[{ text: '📝 Создать анкету', callback_data: 'edit_profile' }]]));
         const d = userDoc.data()!;
         
-        if (!d.media_id && d.photo_url) {
-            d.media_id = d.photo_url;
-            d.media_type = 'photo';
-        }
+        if (!d.media_id && d.photo_url) { d.media_id = d.photo_url; d.media_type = 'photo'; }
         
-        const status = d.active ? '🟢 Анкета показывается другим' : '💤 Анкета скрыта из поиска';
-        const caption = `<b>Твоя анкета:</b>\n\n${d.name}, ${d.age}, ${d.city}\n${d.bio}\n\n<i>${status}</i>`;
+        const statusIndicator = d.active ? '🟢 <b>АКТИВНА</b> (в поиске)' : '🔴 <b>СКРЫТА</b> (пауза)';
+        const caption = `${statusIndicator}\n\n${formatCard(d)}`;
         
         const kbd = Markup.inlineKeyboard([
-            [{ text: '✏️ Редактировать профиль', callback_data: 'edit_profile' }],
-            [{ text: d.active ? '💤 Больше никого не ищу' : '🚀 Возобновить поиск', callback_data: 'toggle_active' }]
+            [{ text: '✏️ Редактировать анкету', callback_data: 'edit_profile' }],
+            [{ text: d.active ? '👁️‍🗨️ Скрыть анкету (Пауза)' : '🚀 Включить анкету (Искать)', callback_data: 'toggle_active' }]
         ]);
         
-        const msg = await sendMedia(ctx, d, caption, kbd.reply_markup);
-        if (ctx.session) ctx.session.myProfileMsgId = msg.message_id;
+        await sendMedia(ctx, d, caption, kbd.reply_markup);
     }
 
-    bot.hears('👤 Моя анкета', (ctx) => showMyProfile(ctx, String(ctx.from.id)));
+    bot.hears('👤 Мой профиль', (ctx) => showMyProfile(ctx, String(ctx.from.id)));
     bot.action('edit_profile', async (ctx: any) => { 
         await ctx.answerCbQuery();
-        if (ctx.session) ctx.session.myProfileMsgId = null;
         await del(ctx, ctx.callbackQuery.message.message_id); 
         ctx.scene.enter('profile-wizard'); 
     });
@@ -260,7 +269,7 @@ if (bot) {
         if (snap.exists()) {
             const newState = !snap.data().active;
             await setDoc(ref, { active: newState }, { merge: true });
-            ctx.answerCbQuery(newState ? 'Поиск включен!' : 'Анкета скрыта!');
+            ctx.answerCbQuery(newState ? 'Анкета включена! 🚀' : 'Анкета спрятана! 💤');
             await showMyProfile(ctx, uid);
         }
     });
@@ -269,62 +278,100 @@ if (bot) {
     async function showNextProfile(ctx: any, telegramId: string) {
         try {
             const userDoc = await getDoc(doc(db, 'users', telegramId));
-            if (!userDoc.exists()) return ctx.reply('Сначала заполни анкету!', Markup.inlineKeyboard([[{ text: '📝 Создать', callback_data: 'edit_profile' }]]));
+            if (!userDoc.exists()) return ctx.reply('Сначала заполни анкету!', Markup.inlineKeyboard([[{ text: '📝 Заполнить', callback_data: 'edit_profile' }]]));
             const myProfile = userDoc.data()!;
             
-            if (!myProfile.active) return ctx.reply('Твоя анкета сейчас выключена! 💤 Включи её в меню "👤 Моя анкета", чтобы кого-то искать.', mainMenu);
+            if (!myProfile.active) return ctx.reply('<b>Упс!</b> Твоя анкета скрыта. 💤\nЗайди в «👤 Мой профиль», чтобы включить её и смотреть других.', { parse_mode: 'HTML', ...mainMenu });
 
             const intQuery = query(collection(db, 'interactions'), where('from_user_id', '==', telegramId));
             const interactions = await getDocs(intQuery);
-            const interactedIds = new Set(interactions.docs.map(d => d.data().to_user_id));
-            interactedIds.add(telegramId);
+            const interactedMap = new Map();
+            interactions.forEach(d => {
+                const data = d.data();
+                interactedMap.set(data.to_user_id, data.created_at?.toMillis?.() || Date.now());
+            });
             
-            let usersQuery = query(collection(db, 'users'), where('active', '==', true), limit(50));
+            let usersQuery = query(collection(db, 'users'), where('active', '==', true), limit(400));
             if (myProfile.target_gender !== 'target_any') {
-                usersQuery = query(collection(db, 'users'), where('active', '==', true), where('gender', '==', myProfile.target_gender), limit(50));
+                const searchGender = myProfile.target_gender === 'target_m' ? 'gender_m' : 'gender_f';
+                usersQuery = query(collection(db, 'users'), where('active', '==', true), where('gender', '==', searchGender), limit(400));
             }
             
             const candidates = await getDocs(usersQuery);
-            let candidateToShow = null;
+            let unseen: any[] = [];
+            let seen: { profile: any, lastInteraction: number }[] = [];
+
             for (const cDoc of candidates.docs) {
-                if (interactedIds.has(cDoc.id)) continue;
                 const b = cDoc.data();
-                if (b.target_gender !== 'target_any' && b.target_gender !== myProfile.gender) continue;
-                candidateToShow = b;
-                break;
+                if (b.telegram_id === telegramId) continue;
+                
+                if (b.target_gender !== 'target_any') {
+                    const theirSearchGender = b.target_gender === 'target_m' ? 'gender_m' : 'gender_f';
+                    if (theirSearchGender !== myProfile.gender) continue;
+                }
+                
+                if (interactedMap.has(b.telegram_id)) {
+                    seen.push({ profile: b, lastInteraction: interactedMap.get(b.telegram_id) });
+                } else {
+                    unseen.push(b);
+                }
+            }
+            
+            const calculateMatchScore = (me: any, cand: any) => {
+                let score = 0;
+                const ageDiff = Math.abs(me.age - cand.age);
+                if (ageDiff <= 2) score += 50;
+                else if (ageDiff <= 5) score += 20;
+                else if (ageDiff <= 10) score += 5;
+                
+                if (me.city && cand.city && me.city.trim().toLowerCase() === cand.city.trim().toLowerCase()) score += 40;
+                if (me.bio && cand.bio) {
+                    const getWords = (t: string) => t.toLowerCase().replace(/[^а-яёa-z0-9]/gi, ' ').split(/\s+/).filter(w => w.length > 3);
+                    const myWords = new Set(getWords(me.bio));
+                    let overlap = 0;
+                    getWords(cand.bio).forEach(w => { if (myWords.has(w)) overlap++; });
+                    score += (overlap * 5);
+                }
+                score += Math.random() * 5;
+                return score;
+            };
+
+            let candidateToShow = null;
+            if (unseen.length > 0) {
+                unseen.sort((a, b) => calculateMatchScore(myProfile, b) - calculateMatchScore(myProfile, a));
+                candidateToShow = unseen[0];
+            } else if (seen.length > 0) {
+                seen.sort((a, b) => a.lastInteraction - b.lastInteraction);
+                candidateToShow = seen[0].profile;
             }
             
             if (!candidateToShow) {
-                const sleepMsg = await ctx.reply('Ждем пока кто-нибудь увидит твою анкету... 🏜️ А пока новых нет.');
-                if (ctx.session) ctx.session.lastSearchMsgId = sleepMsg.message_id;
-                return;
+                return ctx.reply('<b>Пока что никого нет в этой категории!</b> 🏜️\nЗагляни чуть позже.', { parse_mode: 'HTML', ...mainMenu });
             }
             
-            const caption = `<b>${candidateToShow.name}, ${candidateToShow.age}, ${candidateToShow.city}</b>\n\n${candidateToShow.bio}`;
+            const caption = formatCard(candidateToShow);
             const kbd = Markup.inlineKeyboard([
                 [
                     { text: '👎', callback_data: `dislike_${candidateToShow.telegram_id}` },
                     { text: '💤', callback_data: `sleep` },
-                    { text: '❤️', callback_data: `like_${candidateToShow.telegram_id}` }
+                    { text: '💖', callback_data: `like_${candidateToShow.telegram_id}` }
                 ]
             ]);
             
-            const msg = await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
-            if (ctx.session) ctx.session.lastSearchMsgId = msg.message_id;
+            await sendMedia(ctx, candidateToShow, caption, kbd.reply_markup);
             
-        } catch (err) { console.error(err); ctx.reply('Ошибка поиска.', mainMenu); }
+        } catch (err) { console.error(err); ctx.reply('Ошибка поиска. Попробуйте еще раз.', mainMenu); }
     }
 
-    bot.hears('🔥 Смотреть анкеты', async (ctx: any) => {
-        if (ctx.session?.lastSearchMsgId) await del(ctx, ctx.session.lastSearchMsgId);
+    bot.hears('🚀 Знакомства', async (ctx: any) => {
         await showNextProfile(ctx, String(ctx.from.id));
     });
     bot.command('search', (ctx) => showNextProfile(ctx, String(ctx.from?.id)));
 
     bot.action('sleep', async (ctx: any) => {
         await ctx.answerCbQuery('Перерыв ☕');
-        await del(ctx, ctx.callbackQuery.message.message_id);
-        if (ctx.session) ctx.session.lastSearchMsgId = null;
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
+        await ctx.reply('<i>Поиск приостановлен. Нажми «🚀 Знакомства» в меню, чтобы продолжить.</i>', { parse_mode: 'HTML' });
     });
 
     // INTERACTIONS
@@ -334,7 +381,7 @@ if (bot) {
         try {
             await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'like', created_at: serverTimestamp() });
             
-            await del(ctx, ctx.callbackQuery.message.message_id);
+            await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
             
             const matchDoc = await getDoc(doc(db, 'interactions', `${toUserId}_${fromUserId}`));
             if (matchDoc.exists() && matchDoc.data()?.type === 'like') {
@@ -343,19 +390,19 @@ if (bot) {
                 const myUrl = myD.username ? `https://t.me/${myD.username}` : `tg://user?id=${fromUserId}`;
                 const otherUrl = otherD.username ? `https://t.me/${otherD.username}` : `tg://user?id=${toUserId}`;
                 
-                ctx.answerCbQuery('💎 Мэтч!', { showAlert: true });
+                ctx.answerCbQuery('ИТС Э МЭТЧ! 🥳', { showAlert: true });
                 
-                const matchKbdYou = Markup.inlineKeyboard([[{ text: `💬 Написать ${otherD.name}`, url: otherUrl }]]);
-                await sendMedia(ctx, otherD, `<b>Взаимная симпатия с ${otherD.name}!</b> ❤️\nНе стесняйся, пиши!`, matchKbdYou.reply_markup);
+                const matchKbdYou = Markup.inlineKeyboard([[{ text: `✈️ Написать ${otherD.name}`, url: otherUrl }]]);
+                await sendMedia(ctx, otherD, `🎉 <b>Взаимная симпатия!</b> 🎉\n\nВы с <b>${otherD.name}</b> понравились друг другу.\nНе теряй время, жми кнопку и пиши! 🔥`, matchKbdYou.reply_markup);
                 
-                const matchKbdThem = Markup.inlineKeyboard([[{ text: `💬 Написать ${myD.name}`, url: myUrl }]]);
+                const matchKbdThem = Markup.inlineKeyboard([[{ text: `✈️ Написать ${myD.name}`, url: myUrl }]]);
                 
                 const sendMethod = myD.media_type === 'video' ? bot.telegram.sendVideo.bind(bot.telegram) : (myD.media_type === 'animation' ? bot.telegram.sendAnimation.bind(bot.telegram) : bot.telegram.sendPhoto.bind(bot.telegram));
                 const mediaId = myD.media_id || myD.photo_url;
                 
-                await sendMethod(toUserId, mediaId, { caption: `<b>Взаимная симпатия!</b> ❤️\nТы понравился(ась) ${myD.name}!`, reply_markup: matchKbdThem.reply_markup as any, parse_mode: 'HTML' });
+                await sendMethod(toUserId, mediaId, { caption: `🎉 <b>Взаимная симпатия!</b> 🎉\n\nТы понравился(ась) <b>${myD.name}</b>.\nСкорее пиши первым(ой)! 🔥`, reply_markup: matchKbdThem.reply_markup as any, parse_mode: 'HTML' });
             } else {
-                ctx.answerCbQuery('❤️');
+                ctx.answerCbQuery('Лайк отправлен 💖');
             }
             await showNextProfile(ctx, fromUserId);
         } catch (err) { ctx.answerCbQuery('Ошибка'); }
@@ -366,8 +413,8 @@ if (bot) {
         const fromUserId = String(ctx.from?.id);
         try {
             await setDoc(doc(db, 'interactions', `${fromUserId}_${toUserId}`), { from_user_id: fromUserId, to_user_id: toUserId, type: 'dislike', created_at: serverTimestamp() });
-            await del(ctx, ctx.callbackQuery.message.message_id);
-            ctx.answerCbQuery('👎');
+            await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
+            ctx.answerCbQuery('Пропускаем 💨');
             await showNextProfile(ctx, fromUserId);
         } catch (err) { ctx.answerCbQuery('Ошибка'); }
     });
@@ -375,5 +422,5 @@ if (bot) {
     bot.launch();
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
-    console.log('Bot is running heavily optimized...');
+    console.log('Bot is running heavily optimized with beautiful UI...');
 }
