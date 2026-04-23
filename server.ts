@@ -48,6 +48,7 @@ if (bot) {
     bot.telegram.setMyCommands([
         { command: 'search', description: '🚀 Смотреть анкеты' },
         { command: 'myprofile', description: '👤 Моя анкета' },
+        { command: 'sleep', description: '💤 Отключить анкету' },
         { command: 'premium', description: '⭐ Premium' },
         { command: 'complaint', description: '🚫 Пожаловаться' },
         { command: 'stats', description: '📊 Статистика (Админы)' }
@@ -345,6 +346,7 @@ if (bot) {
         bot.telegram.setMyCommands([
             { command: 'search', description: '🚀 Смотреть анкеты' },
             { command: 'myprofile', description: '👤 Моя анкета' },
+            { command: 'sleep', description: '💤 Отключить анкету' },
             { command: 'premium', description: '⭐ Premium' },
             { command: 'complaint', description: '🚫 Пожаловаться' },
             { command: 'stats', description: '📊 Статистика (Админы)' }
@@ -839,7 +841,7 @@ if (bot) {
         } catch(e) {}
     });
 
-    bot.hears('💤', async (ctx: any) => {
+    const handleSleepMenu = async (ctx: any) => {
         if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         if (!ctx.session) ctx.session = {};
         ctx.session.in_sleep_menu = true;
@@ -851,7 +853,10 @@ if (bot) {
         ]).resize();
         
         await ctx.reply(text, { parse_mode: 'HTML', ...kbd });
-    });
+    };
+
+    bot.hears('💤', handleSleepMenu);
+    bot.command('sleep', handleSleepMenu);
 
     bot.hears('Лента', async (ctx: any) => {
         if (ctx.session) ctx.session.currentSearchQuery = null; 
