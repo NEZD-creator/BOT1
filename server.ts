@@ -398,8 +398,22 @@ if (bot) {
         }
     });
 
-    bot.command('complaint', (ctx) => {
-        ctx.reply('🚫 <b>Жалоба</b>\nЕсли вы обнаружили фейк, мошенника или неприемлемый контент, пожалуйста, сделайте скриншот анкеты и перешлите его администраторам. Вы также можете использовать кнопку пожаловаться (если она включена).', { parse_mode: 'HTML' });
+    bot.command('complaint', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        if (!ctx.session?.candidate_id) {
+            return ctx.reply('⚠️ Жалобу можно оставлять только во время просмотра анкеты.');
+        }
+
+        const targetId = ctx.session.candidate_id;
+        const kbd = Markup.inlineKeyboard([
+            [Markup.button.callback('🔞 Материал для взрослых', `repR_1_${targetId}`)],
+            [Markup.button.callback('💰 Продажа товаров и услуг', `repR_2_${targetId}`)],
+            [Markup.button.callback('💩 Спам/Мошенничество', `repR_3_${targetId}`)],
+            [Markup.button.callback('🦨 Другое', `repR_4_${targetId}`)],
+            [Markup.button.callback('Отмена', `repCancel_${targetId}`)]
+        ]);
+
+        await ctx.reply(`Укажите причину жалобы на эту анкету:`, kbd);
     });
 
     bot.command('premium', async (ctx: any) => {
@@ -1193,14 +1207,8 @@ if (bot) {
     });
 
     bot.action(/^repCancel_(.+)$/, async (ctx: any) => {
-        const candidateId = ctx.match[1];
         await ctx.answerCbQuery();
-        
-        const kbd = Markup.inlineKeyboard([
-            [ { text: '❌ Дальше', callback_data: `dislike_${candidateId}` }, { text: '❤️ Лайк', callback_data: `like_${candidateId}` } ],
-            [ { text: '🌟 Суперлайк', callback_data: `superlike_${candidateId}` }, { text: '🚨', callback_data: `reportP_${candidateId}` } ]
-        ]);
-        await ctx.editMessageReplyMarkup(kbd.reply_markup).catch(()=>{});
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
     });
 
     bot.action(/^repR_([1-4])_(.+)$/, async (ctx: any) => {
@@ -1211,7 +1219,7 @@ if (bot) {
         const reasons: any = { '1': '🔞 Материал для взрослых', '2': '💰 Продажа товаров и услуг', '3': '💩 Спам/Мошенничество', '4': '🦨 Другое' };
         
         await ctx.answerCbQuery('Жалоба отправлена модераторам. Спасибо!', { showAlert: true });
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(()=>{});
+        if (ctx.callbackQuery.message) await del(ctx, ctx.callbackQuery.message.message_id);
         
         try {
             const reporterDoc = await getDoc(doc(db, 'users', fromId));
@@ -1248,6 +1256,7 @@ if (bot) {
             }
         } catch(e) { console.error('Error reporting logic', e); }
 
+        if (ctx.session) ctx.session.candidate_id = null;
         await showNextProfile(ctx, fromId);
     });
 
