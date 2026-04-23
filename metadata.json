@@ -1,6 +1,6 @@
 {
-  "name": "Dating Telegram Bot",
-  "description": "A Telegram-based dating bot for finding and matching users by interests, location, and photos.",
+  "name": "Бот Знакомств",
+  "description": "Лучший бот для знакомств в Telegram! Найти друзей, общение, отношения и любовь. Дайвинчик аналог с умным поиском по интересам.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
