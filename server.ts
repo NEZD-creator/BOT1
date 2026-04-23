@@ -47,6 +47,7 @@ if (bot) {
 
     bot.telegram.setMyCommands([
         { command: 'search', description: '🚀 Смотреть анкеты' },
+        { command: 'find', description: '🔍 Поиск по словам' },
         { command: 'myprofile', description: '👤 Моя анкета' },
         { command: 'sleep', description: '💤 Отключить анкету' },
         { command: 'premium', description: '⭐ Premium' },
@@ -345,6 +346,7 @@ if (bot) {
     bot.start(async (ctx: any) => {
         bot.telegram.setMyCommands([
             { command: 'search', description: '🚀 Смотреть анкеты' },
+            { command: 'find', description: '🔍 Поиск по словам' },
             { command: 'myprofile', description: '👤 Моя анкета' },
             { command: 'sleep', description: '💤 Отключить анкету' },
             { command: 'premium', description: '⭐ Premium' },
@@ -877,8 +879,14 @@ if (bot) {
         await showNextProfile(ctx, String(ctx.from.id));
     });
     bot.command('search', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
         if (ctx.session) ctx.session.currentSearchQuery = null;
         await showNextProfile(ctx, String(ctx.from?.id));
+    });
+
+    bot.command('find', async (ctx: any) => {
+        if (ctx.message) await del(ctx, ctx.message.message_id).catch(()=>{});
+        ctx.scene.enter('interest-wizard');
     });
 
     const isSuperAdmin = (ctx: any) => {
