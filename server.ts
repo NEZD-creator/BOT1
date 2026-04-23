@@ -1199,19 +1199,8 @@ if (bot) {
     // REPORTING SYSTEM (COMPLAINTS)
     // ----------------------------------------
     bot.action(/^reportP_(.+)$/, async (ctx: any) => {
-        const targetId = ctx.match[1];
-        await ctx.answerCbQuery();
-        
-        const kbd = Markup.inlineKeyboard([
-            [Markup.button.callback('1. 🔞 Матер. для взрослых', `repR_1_${targetId}`)],
-            [Markup.button.callback('2. 💰 Продажа услуг', `repR_2_${targetId}`)],
-            [Markup.button.callback('3. 💩 Спам/Мошенничество', `repR_3_${targetId}`)],
-            [Markup.button.callback('4. 🦨 Другое', `repR_4_${targetId}`)],
-            [Markup.button.callback('🔙 Вернуться назад', `repCancel_${targetId}`)]
-        ]);
-        
-        // Перезаписываем кнопки на карточке
-        await ctx.editMessageReplyMarkup(kbd.reply_markup).catch(()=>{});
+        // Obsolete action, complain is now via /complaint command
+        await ctx.answerCbQuery('Используй команду /complaint в меню!');
     });
 
     bot.action(/^repCancel_(.+)$/, async (ctx: any) => {
